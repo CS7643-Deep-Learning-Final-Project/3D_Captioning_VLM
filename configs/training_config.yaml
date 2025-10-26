@@ -1,0 +1,20 @@
+data:
+  dataset_path: "/path/to/cap3d"
+  point_cloud_size: 1024
+  batch_size: 16
+  num_workers: 4
+
+model:
+  encoder_type: "point_bert"  # "point_bert" or "dgcnn"
+  embed_dim: 768
+  decoder_type: "gpt2"
+
+training:
+  learning_rate: 1e-4
+  num_epochs: 50
+  warmup_steps: 1000
+  max_length: 128
+
+evaluation:
+  metrics: ["bleu", "cider"]
+  eval_frequency: 1
