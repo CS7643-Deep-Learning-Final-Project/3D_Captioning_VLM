@@ -1,16 +1,20 @@
 data:
-  dataset_path: "/path/to/cap3d"
+  hf_repo: "tiange/Cap3D"
+  hf_file: "Cap3D_automated_ShapeNet.csv"
+  split_train: "train"     # or custom slice/filter logic
+  split_val: "validation"
+  streaming: true
   point_cloud_size: 1024
   batch_size: 16
   num_workers: 4
 
 model:
-  encoder_type: "point_bert"  # "point_bert" or "dgcnn"
+  encoder_type: "dgcnn"  # "point_bert" or "dgcnn"
   embed_dim: 768
   decoder_type: "gpt2"
 
 training:
-  learning_rate: 1e-4
+  learning_rate: 1e-5
   num_epochs: 50
   warmup_steps: 1000
   max_length: 128
