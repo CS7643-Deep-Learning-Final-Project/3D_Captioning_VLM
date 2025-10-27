@@ -2,7 +2,7 @@
 metrics.py
 -----------
 Defines the evaluation manager for assessing caption quality.
-Supports standard metrics such as BLEU and CIDEr.
+Supports standard metrics such as BLEU, ROUGE-L and BERTScore.
 """
 
 from typing import Any, Dict, List, Optional
@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 class CaptionEvaluator:
     """
     Evaluation manager for computing caption quality metrics.
-    Supports standard captioning metrics: BLEU and CIDEr.
+    Supports standard captioning metrics: BLEU, ROUGE-L and BERTScore.
     """
 
     def __init__(self, metrics: Optional[List[str]] = None):
@@ -20,7 +20,7 @@ class CaptionEvaluator:
 
         Args:
             metrics (Optional[List[str]]): List of metric names to compute.
-                Default: ['bleu', 'cider']
+                Default: ['bleu', 'rouge', 'bertscore']
         """
         # Responsibilities:
         # - Store selected metric names
@@ -42,7 +42,7 @@ class CaptionEvaluator:
         """
         # Responsibilities:
         # - Iterate over all predictions and references
-        # - Compute BLEU, CIDEr, or other metrics depending on config
+        # - Compute BLEU, ROUGE-L and BERTScore depending on config
         # - Aggregate and return average scores
         pass
 
