@@ -27,7 +27,16 @@ class ProjectionLayer(nn.Module):
         super().__init__()
         # TODO: define transformation layers (e.g., Linear + Activation)
         # Example: self.proj = nn.Sequential(...)
-        pass
+        
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        
+        # Linear -> Activation -> Linear
+        self.proj = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.GELU(),
+            nn.Linear(hidden_dim, output_dim)
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -44,7 +53,9 @@ class ProjectionLayer(nn.Module):
         # - Apply linear or MLP projection.
         # - Normalize or activate features if needed.
         # - Optionally support dropout or layer normalization.
-        pass
+        
+        # (B, input_dim) -> (B, output_dim)
+        return self.proj(x)
 
 
 __all__ = ["ProjectionLayer"]
