@@ -15,7 +15,7 @@ class ProjectionLayer(nn.Module):
     Handles dimension matching and feature transformation.
     """
 
-    def __init__(self, input_dim: int, output_dim: int, hidden_dim: int = 512):
+    def __init__(self, input_dim: int, output_dim: int, hidden_dim: int = 512, dropout: float = 0.1):
         """
         Initialize projection layers with optional hidden dimension.
 
@@ -24,10 +24,7 @@ class ProjectionLayer(nn.Module):
             output_dim (int): Target dimension matching decoder input.
             hidden_dim (int): Intermediate dimension for nonlinear mapping.
         """
-        super().__init__()
-        # TODO: define transformation layers (e.g., Linear + Activation)
-        # Example: self.proj = nn.Sequential(...)
-        
+        super().__init__()        
         self.input_dim = input_dim
         self.output_dim = output_dim
         
@@ -35,7 +32,9 @@ class ProjectionLayer(nn.Module):
         self.proj = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.GELU(),
-            nn.Linear(hidden_dim, output_dim)
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, output_dim),
+            nn.LayerNorm(output_dim)
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

@@ -8,7 +8,7 @@ Includes GPT-2 based decoder for conditioned text generation.
 import torch
 import torch.nn as nn
 from typing import Any, List, Optional
-
+from transformers import GPT2Tokenizer, GPT2LMHeadModel
 
 class GPT2Decoder(nn.Module):
     """
@@ -25,10 +25,6 @@ class GPT2Decoder(nn.Module):
             max_length (int): Maximum caption length during training or generation.
         """
         super().__init__()
-        # TODO: load tokenizer and pretrained GPT-2 model from HuggingFace transformers
-        # self.tokenizer = ...
-        # self.model = ...
-        # self.max_length = max_length
         
         # 1. load model and tokenizer
         self.tokenizer = GPT2Tokenizer.from_pretrained(model_name)
