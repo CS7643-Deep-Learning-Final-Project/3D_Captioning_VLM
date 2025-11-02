@@ -38,7 +38,7 @@ class GPT2Decoder(nn.Module):
         # 3. set embed_dim
         self.embed_dim = self.model.config.n_embd
 
-    def forward(self, visual_embeddings: torch.Tensor, captions: Optional[List[str]] = None) -> Any:
+    def forward(self, visual_embeddings: torch.Tensor, captions: Optional[List[str]] = None):
         """
         Forward pass for both training and inference.
 
@@ -109,7 +109,7 @@ class GPT2Decoder(nn.Module):
         visual_embeddings: torch.Tensor,
         max_length: int = 128,
         num_beams: int = 3
-    ) -> List[str]:
+    ):
         """
         Generate captions using beam search with visual features as conditioning.
 
@@ -135,7 +135,6 @@ class GPT2Decoder(nn.Module):
         # attention mask (B, 1)
         attention_mask = torch.ones((B, 1), dtype=torch.long, device=device)
 
-        
         output_ids = self.model.generate(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
@@ -155,14 +154,11 @@ class GPT2Decoder(nn.Module):
         
         return generated_text
 
-    def freeze_backbone(self) -> None:
+    def freeze_backbone(self):
         """
         Optionally freeze GPT-2 weights to prevent overfitting or reduce computation.
         Typically used when only fine-tuning projection layers.
         """
-        # Example responsibility:
-        # for param in self.model.parameters():
-        #     param.requires_grad = False
         for param in self.model.parameters():
             param.requires_grad = False
 
