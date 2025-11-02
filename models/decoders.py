@@ -50,7 +50,6 @@ class GPT2Decoder(nn.Module):
             Any: Model outputs (e.g., logits, loss dictionary, or generated tokens depending on mode).
         """
         # Responsibilities:
-        # - Project visual embeddings to GPT-2 hidden size if necessary.
         # - For training: concatenate visual tokens + caption tokens.
         # - For inference: pass visual context only.
         
@@ -138,7 +137,7 @@ class GPT2Decoder(nn.Module):
         output_ids = self.model.generate(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            max_length=max_length + 1, # +1 because prefix takes 1 spot
+            max_new_tokens=max_length,
             num_beams=num_beams,
             pad_token_id=self.tokenizer.pad_token_id,
             eos_token_id=self.tokenizer.eos_token_id,

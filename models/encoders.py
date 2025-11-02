@@ -80,7 +80,10 @@ class DGCNNEncoder(BaseEncoder):
         # apply a 1×1 Conv to get 1024-D global feature maps.
         self.conv5 = nn.Conv1d(512, 1024, kernel_size=1, bias=False)
         self.bn5   = nn.BatchNorm1d(1024)
-
+        
+        if output_dim != 2048:
+            raise ValueError(f"DGCNNEncoder output_dim must be 2048, got {output_dim}")
+        
         if pretrained:
             self.load_pretrained_weights()
     
