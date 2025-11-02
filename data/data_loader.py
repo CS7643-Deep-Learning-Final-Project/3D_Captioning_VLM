@@ -21,8 +21,7 @@ class Cap3DDataset(Dataset):
         hf_file: str = "Cap3D_automated_ShapeNet.csv",
         split: str = "train",
         point_cloud_size: int = 1024,
-        tokenizer: Optional[Any] = None,
-        streaming: bool = True,
+        tokenizer: Optional[Any] = None
     ):
         """
         Args:
@@ -31,14 +30,12 @@ class Cap3DDataset(Dataset):
             split: Dataset split name (you can emulate splits via filters/slices).
             point_cloud_size: Number of points to sample per object.
             tokenizer: Tokenizer for captions.
-            streaming: Use HF streaming mode (iterable dataset) if True.
         """
         self.hf_repo = hf_repo
         self.hf_file = hf_file
         self.split = split
         self.point_cloud_size = point_cloud_size
         self.tokenizer = tokenizer
-        self.streaming = streaming
         self.zip_cache = {}
         self.load_data()
     
@@ -82,6 +79,12 @@ class Cap3DDataset(Dataset):
 
         self.samples = self._filter_split(all_samples)
         print(f"Split '{self.split}': {len(self.samples)} / {len(all_samples)} usable samples")
+        
+        if len(self.samples) == 0:
+            raise ValueError(f"No samples found for split '{self.split}'")
+
+        total_original = len(all_samples)
+        print(f"Split distribution: {len(self.samples)}/{total_original} ({len(self.samples)/total_original:.1%}) for '{self.split}'")
 
     def _filter_split(self, all_samples):
         """
@@ -130,7 +133,7 @@ class Cap3DDataset(Dataset):
         n = pts.shape[0]
         m = self.point_cloud_size
         if n >= m:
-            idx = np.random.choice(n, m, replace=False)
+            idx = np.random.choice(n, m, replace=(n < m))
         else:
             # If too few points, sample with replacement to pad
             repeat = np.random.choice(n, m - n, replace=True)
@@ -150,24 +153,32 @@ class Cap3DDataset(Dataset):
               'tokens': Optional[torch.LongTensor]
             }
         """
-        s = self.samples[idx]
-        zip_path = self._get_zip_path(s["zip"])
+        try:
+            s = self.samples[idx]
+            zip_path = self._get_zip_path(s["zip"])
+            
+            import zipfile, io
+            with zipfile.ZipFile(zip_path) as zf, zf.open(s["member"]) as f:
+                from plyfile import PlyData
+                v = PlyData.read(io.BytesIO(f.read()))["vertex"].data
+                cols = [c for c in ("x", "y", "z", "nx", "ny", "nz", "red", "green", "blue") if c in v.dtype.names]
+                pts = np.column_stack([v[c] for c in cols]).astype(np.float32)
+
+            pts = self.preprocess_point_cloud(pts)
+            sample = {"points": torch.from_numpy(pts), "caption": s["caption"]}
+
+            if self.tokenizer:
+                tok = self.tokenizer(
+                    s["caption"], return_tensors="pt",
+                    truncation=True, padding="longest"
+                )
+                sample["input_ids"] = tok["input_ids"].squeeze(0)
+                sample["attention_mask"] = tok["attention_mask"].squeeze(0)
+
+            return sample
         
-        import zipfile, io
-        with zipfile.ZipFile(zip_path) as zf, zf.open(s["member"]) as f:
-            from plyfile import PlyData
-            v = PlyData.read(io.BytesIO(f.read()))["vertex"].data
-            cols = [c for c in ("x", "y", "z", "nx", "ny", "nz", "red", "green", "blue") if c in v.dtype.names]
-            pts = np.column_stack([v[c] for c in cols]).astype(np.float32)
-
-        pts = self.preprocess_point_cloud(pts)
-        sample = {"points": torch.from_numpy(pts), "caption": s["caption"]}
-
-        if self.tokenizer:
-            tok = self.tokenizer(s["caption"], return_tensors="pt", truncation=True, padding="max_length")
-            sample["tokens"] = tok["input_ids"].squeeze(0)
-
-        return sample
+        except Exception as e:
+            raise RuntimeError(f"Failed uid={s.get('uid')} member={s.get('member')}: {e}")
     
     def __len__(self):
         return len(self.samples)
@@ -183,7 +194,7 @@ class DataModule:
         """
         Expect config['data'] to include:
             - hf_repo, hf_file, split_train, split_val, point_cloud_size,
-              batch_size, num_workers, streaming
+              batch_size, num_workers
         """
         self.cfg = config
         self.tokenizer = tokenizer
@@ -204,7 +215,6 @@ class DataModule:
             hf_file=d.get("hf_file", "Cap3D_automated_ShapeNet.csv"),
             point_cloud_size=d.get("point_cloud_size", 1024),
             tokenizer=self.tokenizer,
-            streaming=d.get("streaming", True),
         )
         self.train_dataset = Cap3DDataset(split=d.get("split_train", "train"), **shared)
         self.val_dataset   = Cap3DDataset(split=d.get("split_val", "val"), **shared)
