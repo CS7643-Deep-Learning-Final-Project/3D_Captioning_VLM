@@ -54,7 +54,20 @@ class ProjectionLayer(nn.Module):
         # - Optionally support dropout or layer normalization.
         
         # (B, input_dim) -> (B, output_dim)
-        return self.proj(x)
+
+        if x.ndim == 2:
+          return self.proj(x)
+        
+
+        # x.ndim == 3
+        if x.ndim == 3:
+          # (B, T, D) -> flatten -> proj -> reshape
+          B, T, D = x.shape
+          y = self.proj(x.reshape(B * T, D))
+          return y.reshape(B, T, self.output_dim)
+
+
+        
 
 
 __all__ = ["ProjectionLayer"]
