@@ -1,13 +1,12 @@
-import os
-import json
 import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
-from typing import Dict, Any, Tuple, Optional
+from typing import Dict, Any, Optional
 from huggingface_hub import hf_hub_download
 import pandas as pd
 import pickle
 import hashlib
+import zipfile, io, os
 
 class Cap3DDataset(Dataset):
     """
@@ -46,6 +45,7 @@ class Cap3DDataset(Dataset):
                 filename=f"PointCloud_zips_ShapeNet/{zip_name}",
                 repo_type="dataset"
             )
+            print("Downloaded zip path:", self.zip_cache[zip_name])
         return self.zip_cache[zip_name]
 
     def _uid_bucket(self, uid: str):
@@ -132,12 +132,7 @@ class Cap3DDataset(Dataset):
         # Sample/pad to fixed size
         n = pts.shape[0]
         m = self.point_cloud_size
-        if n >= m:
-            idx = np.random.choice(n, m, replace=(n < m))
-        else:
-            # If too few points, sample with replacement to pad
-            repeat = np.random.choice(n, m - n, replace=True)
-            idx = np.concatenate([np.arange(n), repeat])
+        idx = np.random.choice(n, m, replace=(n < m))
 
         return pts[idx]
 
@@ -157,23 +152,25 @@ class Cap3DDataset(Dataset):
             s = self.samples[idx]
             zip_path = self._get_zip_path(s["zip"])
             
-            import zipfile, io
-            with zipfile.ZipFile(zip_path) as zf, zf.open(s["member"]) as f:
-                from plyfile import PlyData
-                v = PlyData.read(io.BytesIO(f.read()))["vertex"].data
-                cols = [c for c in ("x", "y", "z", "nx", "ny", "nz", "red", "green", "blue") if c in v.dtype.names]
-                pts = np.column_stack([v[c] for c in cols]).astype(np.float32)
+            with zipfile.ZipFile(zip_path) as zf:
+                names = set(zf.namelist())
+                member = s["member"]
+                if member not in names:
+                    member = f"ShapeNet_pcs/{member}"
+                    if member not in names:
+                        raise FileNotFoundError(f"{s['member']} not found in {zip_path}")
+
+                with zf.open(member) as f:
+                    from plyfile import PlyData
+                    v = PlyData.read(io.BytesIO(f.read()))["vertex"].data
+
+            cols = [c for c in ("x","y","z","nx","ny","nz","red","green","blue") if c in v.dtype.names]
+            if not {"x","y","z"}.issubset(cols):
+                raise ValueError("PLY missing XYZ coordinates.")
+            pts = np.column_stack([v[c] for c in cols]).astype(np.float32)
 
             pts = self.preprocess_point_cloud(pts)
             sample = {"points": torch.from_numpy(pts), "caption": s["caption"]}
-
-            if self.tokenizer:
-                tok = self.tokenizer(
-                    s["caption"], return_tensors="pt",
-                    truncation=True, padding="longest"
-                )
-                sample["input_ids"] = tok["input_ids"].squeeze(0)
-                sample["attention_mask"] = tok["attention_mask"].squeeze(0)
 
             return sample
         
@@ -183,6 +180,22 @@ class Cap3DDataset(Dataset):
     def __len__(self):
         return len(self.samples)
 
+def cap3d_collate(batch, tokenizer=None, max_length=64):
+    points = torch.stack([b["points"] for b in batch])  # (B, N, F)
+    caps   = [b["caption"] for b in batch]
+    out = {"points": points, "caption": caps}
+
+    if tokenizer is not None:
+        tok = tokenizer(
+            caps,
+            return_tensors="pt",
+            truncation=True,
+            padding=True,  # pad to longest caption in batch
+            max_length=max_length
+        )
+        out.update(tok)  # adds 'input_ids' and 'attention_mask'
+
+    return out
 
 class DataModule:
     """
@@ -236,14 +249,16 @@ class DataModule:
         pin = torch.cuda.is_available()
         persist = bool(nw > 0)
 
+        collate = (lambda b: cap3d_collate(b, tokenizer=self.tokenizer, max_length=64))
+
         train_loader = DataLoader(
             self.train_dataset, batch_size=bs, shuffle=True,
             num_workers=nw, pin_memory=pin, persistent_workers=persist,
-            drop_last=True,
+            drop_last=True, collate_fn=collate
         )
         val_loader = DataLoader(
             self.val_dataset, batch_size=bs, shuffle=False,
             num_workers=nw, pin_memory=pin, persistent_workers=persist,
-            drop_last=False,
+            drop_last=False, collate_fn=collate
         )
         return train_loader, val_loader
