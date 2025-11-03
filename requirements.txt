@@ -23,4 +23,5 @@ torchvision
 ipython
 jupyter
 bert-score
+bert_score
 sacrebleu

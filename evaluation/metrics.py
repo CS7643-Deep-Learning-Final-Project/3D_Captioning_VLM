@@ -5,6 +5,8 @@ Defines the evaluation manager for assessing caption quality.
 Supports standard metrics such as BLEU, ROUGE-L and BERTScore.
 """
 from typing import Any, Dict, List, Optional, Tuple
+from pycocoevalcap.ciderD.ciderD import CiderD
+_cider = CiderD()
 import torch
 try:
     from bert_score import score as bert_score  # noqa: F401
@@ -30,7 +32,6 @@ def _normalize(s: str, lowercase: bool, strip: bool):
     s = s.lower()
   return s
 
-
 def _simple_tokenize(s: str):
     """Whitespace tokenizer; uses nltk.word_tokenize if available (lazy import)."""
     if not s:
@@ -41,7 +42,6 @@ def _simple_tokenize(s: str):
     except Exception:
       return s.split()
 
-
 def _prepare_texts(
   predictions: List[str],
   references: List[List[str]],
@@ -51,6 +51,13 @@ def _prepare_texts(
   refs_n = [[_normalize(r, cfg.lowercase, cfg.strip) for r in rs] for rs in references]
   return preds_n, refs_n
 
+# ------------------------ CIDER ------------------------
+def _compute_cider(preds, refs, cfg):
+    # pycocoevalcap expects dicts: {i: [str]}, {i: [str, ...]}
+    gts = {i: (r if r else [""]) for i, r in enumerate(refs)}
+    res = {i: [p] for i, p in enumerate(preds)}
+    score, _ = _cider.compute_score(gts, res)
+    return float(score * 100.0)
 
 # ------------------------ ROUGE-L ------------------------
 def _lcs_length(a: List[str], b: List[str]):
@@ -69,7 +76,6 @@ def _lcs_length(a: List[str], b: List[str]):
         dp[j] = max(dp[j], dp[j - 1])
       prev = tmp
   return dp[lb]
-
 
 def _compute_rouge_l(preds: List[str], refs: List[List[str]], cfg: _Config):
   eps = 1e-8
@@ -157,7 +163,7 @@ class CaptionEvaluator:
     Supports standard captioning metrics: BLEU, ROUGE-L and BERTScore.
     """
 
-    _VALID = {"bleu", "rouge", "rouge-l", "bertscore"}
+    _VALID = {"bleu", "rouge", "rouge-l", "bertscore", "cider"}
 
     def __init__(self, metrics: Optional[List[str]] = None):
         """
@@ -165,14 +171,13 @@ class CaptionEvaluator:
 
         Args:
             metrics (Optional[List[str]]): List of metric names to compute.
-                Default: ['bleu', 'rouge', 'bertscore']
         """
         # Responsibilities:
         # - Store selected metric names
         # - Optionally load external metric computation libraries
 
         if metrics is None:
-          metrics = ["bleu", "rouge", "bertscore"]
+          metrics = ["bleu", "rouge", "rouge-l", "bertscore", "cider"]
         self.metrics = [m.lower() for m in metrics]
         for m in self.metrics:
           if m not in self._VALID:
@@ -210,6 +215,8 @@ class CaptionEvaluator:
             out["bleu"] = _compute_bleu(preds, refs, self._cfg)
           elif name in ("rouge", "rouge-l"):
             out["rouge-l"] = _compute_rouge_l(preds, refs, self._cfg)
+          elif name == "cider":
+            out["cider"] = _compute_cider(preds, refs, self._cfg)
           elif name == "bertscore":
             out["bertscore"] = _compute_bertscore(preds, refs, self._cfg)
         return out
