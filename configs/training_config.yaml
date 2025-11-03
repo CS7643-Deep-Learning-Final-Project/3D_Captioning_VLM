@@ -18,7 +18,17 @@ training:
   num_epochs: 50
   warmup_steps: 1000
   max_length: 128
+  optimizer: "adamw"
+  scheduler: "cosine"
+  weight_decay: 0.01
+  grad_accum_steps: 1
+  max_norm: 1.0
+  num_beams: 3
+  save_top_k: 3
+  amp: true
+  pad_token_id: -100
 
 evaluation:
   metrics: ["bleu", "cider"]
+  main_metric: "cider"
   eval_frequency: 1
