@@ -9,7 +9,8 @@ import os
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from typing import Any, Dict
+import math
+from typing import Any, Dict, List, Union, Optional
 
 
 class Trainer:
@@ -28,7 +29,6 @@ class Trainer:
     ):
         """
         Initialize trainer with model, data, and training configuration.
-
         Args:
             model (nn.Module): CaptionModel combining encoder, projection, and decoder.
             train_loader (DataLoader): Training dataset loader.
@@ -40,15 +40,120 @@ class Trainer:
         # - Move model to device
         # - Initialize optimizer, scheduler, and loss function from config
         # - Store loaders and training parameters
-        pass
+        self.model = model.to(device)
+        self.train_loader = train_loader
+        self.val_loader = val_loader
+        self.device = device
+        
+        train_cfg = config.get("training", {})
+        eval_cfg = config.get("evaluation", {})
+        
+        # core training hyperparameters
+        self.lr = train_cfg.get("learning_rate", 1e-4)
+        self.epochs = train_cfg.get("num_epochs", 10)
+        self.warmup_steps = train_cfg.get("warmup_steps", 0)
+        self.gen_max_length = train_cfg.get("max_length", 128)
+        self.eval_every = eval_cfg.get("eval_frequency", 1)
+        self.metrics = eval_cfg.get("metrics", ["bleu"])
 
-    def train_epoch(self, epoch: int) -> float:
+        # fixed or optional params (could also move to YAML later)
+        self.optimizer_name = train_cfg.get("optimizer", "adamw")
+        self.weight_decay = train_cfg.get("weight_decay", 0.01)
+        self.scheduler_name = train_cfg.get("scheduler", "cosine")
+        self.step_size = train_cfg.get("step_size", 1)
+        self.gamma = train_cfg.get("gamma", 0.9)
+        self.grad_accum_steps = train_cfg.get("grad_accum_steps", 1)
+        self.max_norm = train_cfg.get("max_norm", 1.0)
+        self.pad_token_id = train_cfg.get("pad_token_id", -100)
+        self.gen_num_beams = train_cfg.get("num_beams", 3)
+        self.save_top_k = train_cfg.get("save_top_k", 3)
+        self.main_metric = eval_cfg.get("main_metric", "cider")
+        self.use_amp = bool(train_cfg.get("amp", True) and torch.cuda.is_available())
+    
+        # initialize components
+        self.optimizer = self._build_optimizer(self.optimizer_name, self.lr, self.weight_decay)
+        self.loss_fn = nn.CrossEntropyLoss(ignore_index=self.pad_token_id)
+        self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
+        steps_per_epoch = max(1, math.ceil(len(self.train_loader) / max(1, self.grad_accum_steps)))
+        self.total_steps = self.epochs * steps_per_epoch
+        self.scheduler = self._build_scheduler(self.scheduler_name, self.warmup_steps, self.step_size, self.gamma)
+    
+        self.best_scores: List[float] = [] # track top-k checkpoints
+        self.saved_ckpts: List[str] = [] # track top-k checkpoints
+        self.config = config  # keep YAML for checkpoint metadata
+
+
+    def _build_optimizer(self, name: str, lr: float, weight_decay: float):
+        name = name.lower()
+        if name == "adamw":
+            return torch.optim.AdamW(self.model.parameters(), lr=lr, weight_decay=weight_decay)
+        if name == "adam":
+            return torch.optim.Adam(self.model.parameters(), lr=lr, weight_decay=weight_decay)
+        if name == "sgd":
+            return torch.optim.SGD(self.model.parameters(), lr=lr, momentum=0.9, weight_decay=weight_decay)
+        raise ValueError(f"Unknown optimizer '{name}'")
+    
+    
+    def _build_scheduler(self, name: str, warmup_steps: int, step_size: int, gamma: float):
+        name = name.lower()
+        if name == "none":
+            return None
+        if name == "step":
+            return torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=step_size, gamma=gamma)
+        if name == "cosine":
+            total = max(1, self.total_steps)
+            def lr_lambda(current_step):
+                # linear warmup
+                if warmup_steps > 0 and current_step < warmup_steps:
+                    return float(current_step + 1) / float(warmup_steps)
+                # cosine decay from 1 -> 0
+                progress = (current_step - warmup_steps) / float(max(1, total - warmup_steps))
+                progress = min(max(progress, 0.0), 1.0)
+                return 0.5 * (1.0 + math.cos(math.pi * progress))
+            return torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda)
+        raise ValueError(f"Unknown scheduler '{name}'")
+    
+    
+    def _move_to_device(self, batch: Dict[str, Any]) -> Dict[str, Any]:
+        out = {}
+        for k, v in batch.items():
+            if torch.is_tensor(v):
+                out[k] = v.to(self.device, non_blocking=True)
+            elif isinstance(v, (list, tuple)):
+                # keep text/reference lists on CPU
+                out[k] = v
+            else:
+                out[k] = v
+        return out
+    
+    
+    def _compute_loss_from_outputs(self, outputs: Any, batch: Dict[str, Any]) -> torch.Tensor:
+        # Prefer model-provided loss if available
+        if isinstance(outputs, dict) and "loss" in outputs and outputs["loss"] is not None:
+            return outputs["loss"]
+
+        # Otherwise, try CE over logits & labels
+        logits = None
+        if isinstance(outputs, dict) and "logits" in outputs:
+            logits = outputs["logits"]
+        elif isinstance(outputs, (list, tuple)) and len(outputs) > 0 and torch.is_tensor(outputs[0]):
+            logits = outputs[0]
+
+        labels = batch.get("labels", None)
+        if logits is None or labels is None:
+            raise RuntimeError("Cannot compute loss: need either outputs['loss'] or (logits, labels).")
+
+        # logits: [B, T, V], labels: [B, T]
+        B, T, V = logits.shape
+        loss = self.loss_fn(logits.reshape(B * T, V), labels.reshape(B * T))
+        return loss
+    
+    
+    def train_epoch(self, epoch: int):
         """
         Execute one training epoch and return average loss.
-
         Args:
             epoch (int): Current epoch index.
-
         Returns:
             float: Average training loss across all batches.
         """
@@ -58,9 +163,61 @@ class Trainer:
         # - Compute loss and backpropagate
         # - Update optimizer and scheduler
         # - Track loss for progress display
-        pass
+        self.model.train()
+        running = 0.0
+        count = 0
+        accum = max(1, self.grad_accum_steps)
+        self.optimizer.zero_grad(set_to_none=True)
 
-    def validate(self, evaluator: 'CaptionEvaluator') -> Dict[str, float]:
+        if self.scheduler and isinstance(self.scheduler, torch.optim.lr_scheduler.LambdaLR):
+            # LambdaLR expects per-step .step(); we’ll step after each optimizer step
+            pass
+
+        # --- inside __init__ after building scheduler ---
+        self._per_step_scheduler = isinstance(self.scheduler, torch.optim.lr_scheduler.LambdaLR)
+        self._per_epoch_scheduler = isinstance(self.scheduler, torch.optim.lr_scheduler.StepLR)
+
+        # --- train_epoch ---
+        for step, batch in enumerate(self.train_loader, start=1):
+            batch = self._move_to_device(batch)
+            with torch.cuda.amp.autocast(enabled=self.use_amp):
+                outputs = self.model(**{k: v for k, v in batch.items() if k != "references"})
+                loss = self._compute_loss_from_outputs(outputs, batch) / accum
+
+            self.scaler.scale(loss).backward()
+            do_step = (step % accum == 0) or (step == len(self.train_loader))
+            if do_step:
+                if self.max_norm and self.max_norm > 0:
+                    self.scaler.unscale_(self.optimizer)
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.max_norm)
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+                self.optimizer.zero_grad(set_to_none=True)
+
+                # step only per-step schedulers here
+                if self._per_step_scheduler:
+                    self.scheduler.step()
+
+        # step only per-epoch schedulers here
+        if self._per_epoch_scheduler:
+            self.scheduler.step()
+
+            running += loss.item() * accum
+            count += 1
+            log_every = int(self.config.get("training", {}).get("log_every", 50))
+            if step % log_every == 0:
+                lr = self.optimizer.param_groups[0]["lr"]
+                print(f"[Epoch {epoch} | Step {step}/{len(self.train_loader)}] "
+                      f"loss={running / count:.4f} lr={lr:.2e}")
+
+        # Epoch-level schedulers (StepLR typical)
+        if self.scheduler is not None and isinstance(self.scheduler, torch.optim.lr_scheduler.StepLR):
+            self.scheduler.step()
+        avg = running / max(1, count)
+        return avg
+    
+
+    def validate(self, evaluator: 'CaptionEvaluator'):
         """
         Run validation on entire validation set and return metric scores.
 
@@ -75,9 +232,54 @@ class Trainer:
         # - Disable gradient computation
         # - Generate captions for validation samples
         # - Use evaluator to compute scores (e.g., BLEU, CIDEr)
-        pass
+        self.model.eval()
+        predictions: List[str] = []
+        references_all: List[List[str]] = []
 
-    def train(self, evaluator: 'CaptionEvaluator', save_dir: str = "checkpoints") -> None:
+        for batch in self.val_loader:
+            batch = self._move_to_device(batch)
+
+            # Determine visual embeddings
+            if "visual_embeddings" in batch and torch.is_tensor(batch["visual_embeddings"]):
+                vemb = batch["visual_embeddings"]
+            elif hasattr(self.model, "encode") and callable(getattr(self.model, "encode")) and "visual" in batch:
+                vemb = self.model.encode(batch["visual"])
+            else:
+                raise RuntimeError("Validation requires 'visual_embeddings' in batch or model.encode(visual).")
+
+            # Generate captions (expects model.generate to return List[str] or List[List[int]] decoded internally)
+            gen = self.model.generate(
+                visual_embeddings=vemb,
+                max_length=self.gen_max_length,
+                num_beams=self.gen_num_beams,
+            )
+
+            if isinstance(gen, (list, tuple)) and len(gen) > 0 and isinstance(gen[0], str):
+                preds = list(gen)
+            else:
+                # If the model returns token IDs, it must provide a .decode method
+                if not hasattr(self.model, "decode"):
+                    raise RuntimeError("Model returned token IDs but has no .decode(...) for validation.")
+                preds = [self.model.decode(g) for g in gen]
+
+            predictions.extend(preds)
+
+            # References: batch may provide ["references"] as List[List[str]] or List[str]
+            refs = batch.get("references", None)
+            if refs is None:
+                raise RuntimeError("Validation dataloader must yield 'references' per sample.")
+            # Normalize refs to List[List[str]]
+            if len(refs) > 0 and isinstance(refs[0], str):
+                references_all.extend([[r] for r in refs])  # single-ref per item
+            else:
+                references_all.extend(refs)
+
+        # Compute metrics
+        scores = evaluator.evaluate(predictions, references_all)
+        return scores
+    
+
+    def train(self, evaluator: 'CaptionEvaluator', save_dir: str = "checkpoints"):
         """
         Execute complete training procedure with periodic validation and checkpointing.
 
@@ -90,12 +292,43 @@ class Trainer:
         # - Call train_epoch() and validate() each epoch
         # - Log results and print progress
         # - Save best model checkpoint based on validation metric
-        pass
+        os.makedirs(save_dir, exist_ok=True)
+        best_main = -float("inf")
+        main_key = self.main_metric
 
-    def save_checkpoint(self, epoch: int, scores: Dict[str, float], save_dir: str) -> None:
+        for epoch in range(1, self.epochs + 1):
+            train_loss = self.train_epoch(epoch)
+            print(f"Epoch {epoch} finished. avg_train_loss={train_loss:.4f}")
+
+            do_eval = (epoch % max(1, int(self.eval_every)) == 0)
+            if not do_eval:
+                continue
+
+            val_scores = self.validate(evaluator)
+            pretty = " | ".join([f"{k}: {v:.2f}" for k, v in val_scores.items()])
+            print(f"[Val @ epoch {epoch}] {pretty}")
+
+            main_value = val_scores.get(main_key)
+            if main_value is None:
+                if not val_scores:
+                    raise RuntimeError("No validation scores returned.")
+                main_key = next(iter(val_scores))
+                main_value = val_scores[main_key]
+                print(f"main_metric '{self.main_metric}' not found; falling back to '{main_key}'.")
+
+            ckpt_path = self.save_checkpoint(epoch, val_scores, save_dir)
+            self._maybe_register_topk(ckpt_path, main_value)
+
+            if main_value > best_main:
+                best_main = main_value
+                print(f"New best {main_key}: {best_main:.2f} (epoch {epoch})")
+
+        print("Training complete.")
+
+
+    def save_checkpoint(self, epoch: int, scores: Dict[str, float], save_dir: str):
         """
         Save model checkpoint with training metadata and evaluation scores.
-
         Args:
             epoch (int): Current training epoch.
             scores (Dict[str, float]): Validation metrics for this checkpoint.
@@ -105,7 +338,44 @@ class Trainer:
         # - Create save directory if not exists
         # - Serialize model state_dict, optimizer state, and current scores
         # - Optionally keep only best checkpoints
-        pass
+        os.makedirs(save_dir, exist_ok=True)
+        ckpt = {
+            "epoch": epoch,
+            "model_state": self.model.state_dict(),
+            "optimizer_state": self.optimizer.state_dict(),
+            "scheduler_state": self.scheduler.state_dict() if self.scheduler is not None else None,
+            "scaler_state": self.scaler.state_dict() if self.scaler is not None else None,
+            "scores": scores,
+            "config": self.config,  # store raw YAML config
+        }
+        path = os.path.join(save_dir, f"epoch{epoch:03d}.pt")
+        torch.save(ckpt, path)
+        print(f"Saved checkpoint: {path}")
+        return path
+    
+    
+    def _maybe_register_topk(self, path: str, score: float):
+        """
+        Keep only top-k checkpoints by the tracked metric.
+        """
+        self.best_scores.append(score)
+        self.saved_ckpts.append(path)
+        # sort (higher is better)
+        pairs = sorted(zip(self.best_scores, self.saved_ckpts), key=lambda x: x[0], reverse=True)
+        # truncate
+        if len(pairs) > self.save_top_k:
+            # delete the extras from disk
+            for _, p in pairs[self.save_top_k:]:
+                try:
+                    if os.path.exists(p):
+                        os.remove(p)
+                        print(f"Removed old checkpoint: {p}")
+                except Exception as e:
+                    print(f"Warning: failed to remove {p}: {e}")
+            pairs = pairs[:self.save_top_k]
+        # unpack back
+        self.best_scores = [s for s, _ in pairs]
+        self.saved_ckpts = [p for _, p in pairs]
 
 
 __all__ = ["Trainer"]
