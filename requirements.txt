@@ -22,3 +22,5 @@ accelerate
 torchvision
 ipython
 jupyter
+bert-score
+sacrebleu

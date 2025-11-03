@@ -4,9 +4,13 @@ metrics.py
 Defines the evaluation manager for assessing caption quality.
 Supports standard metrics such as BLEU, ROUGE-L and BERTScore.
 """
-
 from typing import Any, Dict, List, Optional, Tuple
-
+import torch
+try:
+    from bert_score import score as bert_score  # noqa: F401
+    _HAS_BERTSCORE = True
+except Exception:
+    _HAS_BERTSCORE = False
 
 class _Config:
   bleu_max_n: int = 4
@@ -17,7 +21,7 @@ class _Config:
   strip: bool = True
 
 
-def _normalize(s: str, lowercase: bool, strip: bool) -> str:
+def _normalize(s: str, lowercase: bool, strip: bool):
   if s is None:
     s = ""
   if strip:
@@ -27,7 +31,7 @@ def _normalize(s: str, lowercase: bool, strip: bool) -> str:
   return s
 
 
-def _simple_tokenize(s: str) -> List[str]:
+def _simple_tokenize(s: str):
     """Whitespace tokenizer; uses nltk.word_tokenize if available (lazy import)."""
     if not s:
       return []
@@ -42,14 +46,14 @@ def _prepare_texts(
   predictions: List[str],
   references: List[List[str]],
   cfg: _Config
-) -> Tuple[List[str], List[List[str]]]:
+):
   preds_n = [_normalize(p, cfg.lowercase, cfg.strip) for p in predictions]
   refs_n = [[_normalize(r, cfg.lowercase, cfg.strip) for r in rs] for rs in references]
   return preds_n, refs_n
 
 
-# ------------------------ ROUGE-L (pure Python) ------------------------
-def _lcs_length(a: List[str], b: List[str]) -> int:
+# ------------------------ ROUGE-L ------------------------
+def _lcs_length(a: List[str], b: List[str]):
   la, lb = len(a), len(b)
   if la == 0 or lb == 0:
     return 0
@@ -67,7 +71,7 @@ def _lcs_length(a: List[str], b: List[str]) -> int:
   return dp[lb]
 
 
-def _compute_rouge_l(preds: List[str], refs: List[List[str]], cfg: _Config) -> float:
+def _compute_rouge_l(preds: List[str], refs: List[List[str]], cfg: _Config):
   eps = 1e-8
   beta2 = cfg.rouge_beta ** 2
   per_item = []
@@ -96,29 +100,39 @@ def _compute_rouge_l(preds: List[str], refs: List[List[str]], cfg: _Config) -> f
 
 
 # ----------------------------- BLEU-4 ---------------------------------
-def _compute_bleu(preds: List[str], refs: List[List[str]], cfg: _Config) -> float:
+def _compute_bleu(preds: List[str], refs: List[List[str]], cfg: _Config):
   """
-  Try nltk BLEU first; if unavailable, fall back to sacrebleu.
-  Both return a 0–100 score here.
+  Try sacrebleu.
+  Both return a 0-100 score here.
   """
-  # Attempt nltk BLEU (corpus-level)
-  
-  from nltk.translate.bleu_score import corpus_bleu, SmoothingFunction  # type: ignore
-  hyp_tok = [_simple_tokenize(p) for p in preds]
-  ref_tok: List[List[List[str]]] = [[_simple_tokenize(r) for r in rset] for rset in refs]
-  n = max(1, int(cfg.bleu_max_n))
-  weights = tuple([1.0 / n] * n)
-  smooth = SmoothingFunction().method3
-  score = corpus_bleu(ref_tok, hyp_tok, weights=weights, smoothing_function=smooth)
-  return float(score * 100.0)
-  
+  # SacreBLEU (standardized & reproducible)
+  try:
+      import sacrebleu  # type: ignore
+      refs = [rset if len(rset) > 0 else [""] for rset in refs]
+      # SacreBLEU expects detokenized strings.
+      sys_hyp = preds  # already normalized by _prepare_texts
+      # Transpose refs to shape: K lists of length N (K = max #refs)
+      max_refs = max(len(rset) for rset in refs) if refs else 0
+      refs_k: List[List[str]] = []
+      for k in range(max_refs):
+          refs_k.append([rset[k] if k < len(rset) else rset[-1] for rset in refs])
 
+      bleu = sacrebleu.corpus_bleu(
+          sys_hyp, refs_k,
+          smooth_method="exp",
+          smooth_value=0.0,
+          force=True,
+          use_effective_order=True,
+      )
+      # sacrebleu already returns 0–100
+      return float(bleu.score)
+  except Exception:
+      return 0.0
 
 # --------------------------- BERTScore --------------------------------
-def _compute_bertscore(preds: List[str], refs: List[List[str]], cfg: _Config) -> float:
-  
-
-  import torch
+def _compute_bertscore(preds: List[str], refs: List[List[str]], cfg: _Config):
+  if not _HAS_BERTSCORE:
+    raise ImportError("bert-score is not installed. `pip install bert-score`")
   device = "cuda" if torch.cuda.is_available() else "cpu"
   refs_norm = [r if len(r) > 0 else [""] for r in refs]
   max_refs = max(len(r) for r in refs_norm)
@@ -135,11 +149,6 @@ def _compute_bertscore(preds: List[str], refs: List[List[str]], cfg: _Config) ->
     )
     best_f = F1 if best_f is None else torch.maximum(best_f, F1)
   return float(best_f.mean().item() * 100.0)
-
-
-
-
-
 
 
 class CaptionEvaluator:
@@ -161,7 +170,6 @@ class CaptionEvaluator:
         # Responsibilities:
         # - Store selected metric names
         # - Optionally load external metric computation libraries
-        #   (e.g., nltk, pycocoevalcap)
 
         if metrics is None:
           metrics = ["bleu", "rouge", "bertscore"]
@@ -171,9 +179,8 @@ class CaptionEvaluator:
             raise ValueError(f"Unknown metric '{m}'. Valid: {sorted(self._VALID)}")
         self._cfg = _Config()
 
-        
 
-    def evaluate(self, predictions: List[str], references: List[List[str]]) -> Dict[str, float]:
+    def evaluate(self, predictions: List[str], references: List[List[str]]):
         """
         Compute evaluation metrics for generated captions.
 
@@ -202,19 +209,17 @@ class CaptionEvaluator:
           if name == "bleu":
             out["bleu"] = _compute_bleu(preds, refs, self._cfg)
           elif name in ("rouge", "rouge-l"):
-            out["rouge"] = _compute_rouge_l(preds, refs, self._cfg)
+            out["rouge-l"] = _compute_rouge_l(preds, refs, self._cfg)
           elif name == "bertscore":
             out["bertscore"] = _compute_bertscore(preds, refs, self._cfg)
         return out
 
-    def evaluate_single(self, prediction: str, reference: str) -> Dict[str, float]:
+    def evaluate_single(self, prediction: str, reference: str):
         """
         Convenience method for evaluating a single prediction-reference pair.
-
         Args:
             prediction (str): Generated caption.
             reference (str): Ground-truth caption.
-
         Returns:
             Dict[str, float]: Metric scores for the given pair.
         """
@@ -223,8 +228,5 @@ class CaptionEvaluator:
         # - Useful for debugging or qualitative analysis
 
         return self.evaluate([prediction], [[reference]])
-
-
-
 
 __all__ = ["CaptionEvaluator"]

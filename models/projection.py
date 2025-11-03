@@ -37,7 +37,7 @@ class ProjectionLayer(nn.Module):
             nn.LayerNorm(output_dim)
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor):
         """
         Project encoder features to decoder-compatible space.
 
@@ -58,16 +58,11 @@ class ProjectionLayer(nn.Module):
         if x.ndim == 2:
           return self.proj(x)
         
-
         # x.ndim == 3
         if x.ndim == 3:
           # (B, T, D) -> flatten -> proj -> reshape
           B, T, D = x.shape
           y = self.proj(x.reshape(B * T, D))
           return y.reshape(B, T, self.output_dim)
-
-
-        
-
 
 __all__ = ["ProjectionLayer"]
