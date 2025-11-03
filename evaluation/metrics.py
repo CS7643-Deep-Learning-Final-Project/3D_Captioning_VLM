@@ -5,8 +5,8 @@ Defines the evaluation manager for assessing caption quality.
 Supports standard metrics such as BLEU, ROUGE-L and BERTScore.
 """
 from typing import Any, Dict, List, Optional, Tuple
-from pycocoevalcap.ciderD.ciderD import CiderD
-_cider = CiderD()
+from pycocoevalcap.cider.cider import Cider
+_cider = Cider()
 import torch
 try:
     from bert_score import score as bert_score  # noqa: F401
@@ -163,7 +163,7 @@ class CaptionEvaluator:
     Supports standard captioning metrics: BLEU, ROUGE-L and BERTScore.
     """
 
-    _VALID = {"bleu", "rouge", "rouge-l", "bertscore", "cider"}
+    _VALID = {"bleu", "rouge-l", "bertscore", "cider"}
 
     def __init__(self, metrics: Optional[List[str]] = None):
         """
@@ -177,7 +177,7 @@ class CaptionEvaluator:
         # - Optionally load external metric computation libraries
 
         if metrics is None:
-          metrics = ["bleu", "rouge", "rouge-l", "bertscore", "cider"]
+          metrics = ["bleu", "rouge-l", "bertscore", "cider"]
         self.metrics = [m.lower() for m in metrics]
         for m in self.metrics:
           if m not in self._VALID:
@@ -213,7 +213,7 @@ class CaptionEvaluator:
         for name in self.metrics:
           if name == "bleu":
             out["bleu"] = _compute_bleu(preds, refs, self._cfg)
-          elif name in ("rouge", "rouge-l"):
+          elif name in ("rouge-l"):
             out["rouge-l"] = _compute_rouge_l(preds, refs, self._cfg)
           elif name == "cider":
             out["cider"] = _compute_cider(preds, refs, self._cfg)

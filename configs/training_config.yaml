@@ -29,6 +29,6 @@ training:
   pad_token_id: -100
 
 evaluation:
-  metrics: ["bleu", "cider"]
+  metrics: ["bleu", "cider", "rouge-l", "bertscore"]
   main_metric: "cider"
   eval_frequency: 1

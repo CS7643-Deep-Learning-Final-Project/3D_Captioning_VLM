@@ -54,7 +54,7 @@ class Trainer:
         self.warmup_steps = train_cfg.get("warmup_steps", 0)
         self.gen_max_length = train_cfg.get("max_length", 128)
         self.eval_every = eval_cfg.get("eval_frequency", 1)
-        self.metrics = eval_cfg.get("metrics", ["bleu"])
+        self.metrics = eval_cfg.get("metrics", ["cider"])
 
         # fixed or optional params (could also move to YAML later)
         self.optimizer_name = train_cfg.get("optimizer", "adamw")
@@ -77,6 +77,9 @@ class Trainer:
         steps_per_epoch = max(1, math.ceil(len(self.train_loader) / max(1, self.grad_accum_steps)))
         self.total_steps = self.epochs * steps_per_epoch
         self.scheduler = self._build_scheduler(self.scheduler_name, self.warmup_steps, self.step_size, self.gamma)
+        
+        self._per_step_scheduler = isinstance(self.scheduler, torch.optim.lr_scheduler.LambdaLR)
+        self._per_epoch_scheduler = isinstance(self.scheduler, torch.optim.lr_scheduler.StepLR)
     
         self.best_scores: List[float] = [] # track top-k checkpoints
         self.saved_ckpts: List[str] = [] # track top-k checkpoints
@@ -169,14 +172,6 @@ class Trainer:
         accum = max(1, self.grad_accum_steps)
         self.optimizer.zero_grad(set_to_none=True)
 
-        if self.scheduler and isinstance(self.scheduler, torch.optim.lr_scheduler.LambdaLR):
-            # LambdaLR expects per-step .step(); we’ll step after each optimizer step
-            pass
-
-        # --- inside __init__ after building scheduler ---
-        self._per_step_scheduler = isinstance(self.scheduler, torch.optim.lr_scheduler.LambdaLR)
-        self._per_epoch_scheduler = isinstance(self.scheduler, torch.optim.lr_scheduler.StepLR)
-
         # --- train_epoch ---
         for step, batch in enumerate(self.train_loader, start=1):
             batch = self._move_to_device(batch)
@@ -193,14 +188,9 @@ class Trainer:
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
                 self.optimizer.zero_grad(set_to_none=True)
-
                 # step only per-step schedulers here
                 if self._per_step_scheduler:
                     self.scheduler.step()
-
-        # step only per-epoch schedulers here
-        if self._per_epoch_scheduler:
-            self.scheduler.step()
 
             running += loss.item() * accum
             count += 1
@@ -208,22 +198,18 @@ class Trainer:
             if step % log_every == 0:
                 lr = self.optimizer.param_groups[0]["lr"]
                 print(f"[Epoch {epoch} | Step {step}/{len(self.train_loader)}] "
-                      f"loss={running / count:.4f} lr={lr:.2e}")
+                    f"loss={running / count:.4f} lr={lr:.2e}")
 
-        # Epoch-level schedulers (StepLR typical)
-        if self.scheduler is not None and isinstance(self.scheduler, torch.optim.lr_scheduler.StepLR):
+        if self._per_epoch_scheduler: # step only per-epoch schedulers here
             self.scheduler.step()
-        avg = running / max(1, count)
-        return avg
+        return running / max(1, count)
     
 
     def validate(self, evaluator: 'CaptionEvaluator'):
         """
         Run validation on entire validation set and return metric scores.
-
         Args:
             evaluator (CaptionEvaluator): Evaluation helper handling BLEU/CIDEr/etc.
-
         Returns:
             Dict[str, float]: Dictionary of validation metrics and scores.
         """
