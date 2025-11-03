@@ -9,7 +9,6 @@ import torch
 import torch.nn as nn
 from abc import ABC, abstractmethod
 from typing import Any
-from models.dgcnn import DGCNN
 import torch.nn.functional as F
 
 class BaseEncoder(ABC, nn.Module):
