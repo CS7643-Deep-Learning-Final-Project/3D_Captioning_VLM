@@ -65,7 +65,7 @@ def setup_environment(config: Dict[str, Any]):
     if hasattr(DataModule, "from_config"):
         datamodule = DataModule.from_config(data_cfg)
     else:
-        datamodule = DataModule(**data_cfg) if isinstance(data_cfg, dict) else DataModule()
+        datamodule = DataModule(data_cfg) if isinstance(data_cfg, dict) else DataModule()
     # allow either .setup() or .prepare_data()/.setup(stage="fit")
     if hasattr(datamodule, "setup"):
         try:
@@ -80,7 +80,7 @@ def setup_environment(config: Dict[str, Any]):
     if hasattr(CaptionModel, "from_config"):
         model = CaptionModel.from_config(model_cfg)
     else:
-        model = CaptionModel(**model_cfg) if isinstance(model_cfg, dict) else CaptionModel()
+        model = CaptionModel(model_cfg) if isinstance(model_cfg, dict) else CaptionModel()
 
     model.to(device)
     return device, datamodule, model
@@ -97,10 +97,9 @@ def main():
     """Main execution function coordinating the full training pipeline."""
     parser = argparse.ArgumentParser(description="Train captioning model")
     parser.add_argument(
-        "-c", "--config", default="configs/train_config.yaml", help="Path to YAML config"
+        "-c", "--config", default="configs/training_config.yaml", help="Path to YAML config"
     )
     args = parser.parse_args()
-
     config = load_config(args.config)
     device, datamodule, model = setup_environment(config)
 
