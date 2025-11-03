@@ -88,6 +88,7 @@ def setup_environment(config: Dict[str, Any]):
 
 # --- 3. Main execution pipeline ---
 def main():
+    os.chdir(os.path.dirname(__file__))
     """Main execution function coordinating the full training pipeline."""
     # 1. Load config
     # 2. Setup environment (device, data, model)
