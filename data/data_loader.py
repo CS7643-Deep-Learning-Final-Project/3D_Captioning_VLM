@@ -20,7 +20,8 @@ class Cap3DDataset(Dataset):
         hf_file: str = "Cap3D_automated_ShapeNet.csv",
         split: str = "train",
         point_cloud_size: int = 1024,
-        tokenizer: Optional[Any] = None
+        tokenizer: Optional[Any] = None,
+        config: Dict[str, Any] = {}
     ):
         """
         Args:
@@ -36,6 +37,7 @@ class Cap3DDataset(Dataset):
         self.point_cloud_size = point_cloud_size
         self.tokenizer = tokenizer
         self.zip_cache = {}
+        self.config = config
         self.load_data()
     
     def _get_zip_path(self, zip_name: str):
@@ -43,7 +45,8 @@ class Cap3DDataset(Dataset):
             self.zip_cache[zip_name] = hf_hub_download(
                 repo_id=self.hf_repo,
                 filename=f"PointCloud_zips_ShapeNet/{zip_name}",
-                repo_type="dataset"
+                repo_type="dataset",
+                cache_dir= self.config.get('cache_dir', None),
             )
             print("Downloaded zip path:", self.zip_cache[zip_name])
         return self.zip_cache[zip_name]
@@ -59,7 +62,9 @@ class Cap3DDataset(Dataset):
         """
         csv_path = hf_hub_download(repo_id=self.hf_repo,
                                 filename=self.hf_file,
-                                repo_type="dataset")
+                                repo_type="dataset",
+                                cache_dir= self.config.get('cache_dir', None)
+                                )
         df = pd.read_csv(csv_path, header=None, names=["uid", "caption"], dtype=str)
 
         # single zip file
@@ -228,6 +233,7 @@ class DataModule:
             hf_file=d.get("hf_file", "Cap3D_automated_ShapeNet.csv"),
             point_cloud_size=d.get("point_cloud_size", 1024),
             tokenizer=self.tokenizer,
+            config = self.cfg
         )
         self.train_dataset = Cap3DDataset(split=d.get("split_train", "train"), **shared)
         self.val_dataset   = Cap3DDataset(split=d.get("split_val", "val"), **shared)

@@ -9,6 +9,7 @@ data:
   num_workers: 12         # Increased from 2 for better data loading parallelism
   prefetch_factor: 4      # Prefetch 4 batches per worker
   persistent_workers: true # Keep workers alive between epochs
+  # cache_dir: "/storage/ice1/6/7/ataprantzis3" # Optionally specify where cache gets stored
 
 model:
   encoder_type: "dgcnn"  # "point_bert" or "dgcnn"
