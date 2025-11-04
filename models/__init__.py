@@ -38,7 +38,7 @@ class CaptionModel(nn.Module):
         # - Initialize encoder via EncoderFactory
         self.encoder = EncoderFactory.create_encoder(config['encoder_type'], config['output_dim'])
         # - Initialize projection layer (input_dim=encoder_dim, output_dim=decoder_dim)
-        self.projection = ProjectionLayer(input_dim=config['output_dim'], output_dim=2048)
+        self.projection = ProjectionLayer(input_dim=config['output_dim'], output_dim=config['embed_dim'])
         # - Initialize decoder (e.g., GPT2Decoder)
         self.decoder = GPT2Decoder(model_name=config['decoder_name'])
         # - Handle optional freezing of encoder weights
@@ -60,11 +60,11 @@ class CaptionModel(nn.Module):
         # - Pass embeddings through projection → decoder space
         f = self.projection(f)
         # - If captions are provided: run decoder forward() for training
-        captions = None
-        if caption:
-            captions = self.decoder.generate(f)
         # - If no caption: run decoder.generate() for inference
-        return captions
+        if caption:
+            return self.decoder(f, caption)
+        else:
+            return self.decoder(f)
 
     def generate(self, point_clouds: torch.Tensor, **gen_kwargs) -> List[str]:
         """

@@ -176,7 +176,7 @@ class Trainer:
         for step, batch in enumerate(self.train_loader, start=1):
             batch = self._move_to_device(batch)
             with torch.cuda.amp.autocast(enabled=self.use_amp):
-                outputs = self.model(**{k: v for k, v in batch.items() if k != "references"})
+                outputs = self.model.forward(**{k: v for k, v in batch.items() if k != "references"})
                 loss = self._compute_loss_from_outputs(outputs, batch) / accum
 
             self.scaler.scale(loss).backward()
