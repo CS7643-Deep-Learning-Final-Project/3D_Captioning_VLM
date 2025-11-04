@@ -170,7 +170,7 @@ class Cap3DDataset(Dataset):
             pts = np.column_stack([v[c] for c in cols]).astype(np.float32)
 
             pts = self.preprocess_point_cloud(pts)
-            sample = {"points": torch.from_numpy(pts), "caption": s["caption"]}
+            sample = {"point_clouds": torch.from_numpy(pts), "caption": s["caption"]}
 
             return sample
         
@@ -181,9 +181,9 @@ class Cap3DDataset(Dataset):
         return len(self.samples)
 
 def cap3d_collate(batch, tokenizer=None, max_length=64):
-    points = torch.stack([b["points"] for b in batch])  # (B, N, F)
+    points = torch.stack([b["point_clouds"] for b in batch])  # (B, N, F)
     caps   = [b["caption"] for b in batch]
-    out = {"points": points, "caption": caps}
+    out = {"point_clouds": points, "caption": caps}
 
     if tokenizer is not None:
         tok = tokenizer(
@@ -245,7 +245,7 @@ class DataModule:
 
         d = self.cfg.get("data", {})
         bs = d.get("batch_size", 16)
-        nw = d.get("num_workers", 2)
+        nw = d.get("num_workers", 0)
         pin = torch.cuda.is_available()
         persist = bool(nw > 0)
 

@@ -1,5 +1,5 @@
-torch
-transformers
+pytorch
+transformers>=4.30.0
 datasets
 huggingface_hub
 pandas
@@ -22,6 +22,6 @@ accelerate
 torchvision
 ipython
 jupyter
-bert-score
+# bert-score
 bert_score
 sacrebleu
