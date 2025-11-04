@@ -36,28 +36,35 @@ class CaptionModel(nn.Module):
         super().__init__()
         # Responsibilities:
         # - Initialize encoder via EncoderFactory
+        self.encoder = EncoderFactory.create_encoder(config['encoder_type'], config['output_dim'])
         # - Initialize projection layer (input_dim=encoder_dim, output_dim=decoder_dim)
+        self.projection = ProjectionLayer(input_dim=config['output_dim'], output_dim=2048)
         # - Initialize decoder (e.g., GPT2Decoder)
+        self.decoder = GPT2Decoder(model_name=config['decoder_name'])
         # - Handle optional freezing of encoder weights
-        pass
 
-    def forward(self, point_clouds: torch.Tensor, captions: Optional[List[str]] = None) -> Any:
+    def forward(self, point_clouds: torch.Tensor, caption: Optional[List[str]] = None) -> Any:
         """
         Complete forward pass for training and inference.
 
         Args:
             point_clouds (torch.Tensor): Input point clouds of shape (B, N, 3).
-            captions (Optional[List[str]]): Ground-truth captions (for training).
+            caption (Optional[List[str]]): Ground-truth captions (for training).
         
         Returns:
             Any: Model output (e.g., logits, loss dict, or generated text depending on mode).
         """
         # Responsibilities:
         # - Pass point_clouds through encoder → embeddings
+        f = self.encoder(point_clouds)
         # - Pass embeddings through projection → decoder space
+        f = self.projection(f)
         # - If captions are provided: run decoder forward() for training
-        # - If no captions: run decoder.generate() for inference
-        pass
+        captions = None
+        if caption:
+            captions = self.decoder.generate(f)
+        # - If no caption: run decoder.generate() for inference
+        return captions
 
     def generate(self, point_clouds: torch.Tensor, **gen_kwargs) -> List[str]:
         """
