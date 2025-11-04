@@ -247,18 +247,21 @@ class DataModule:
         bs = d.get("batch_size", 16)
         nw = d.get("num_workers", 0)
         pin = torch.cuda.is_available()
-        persist = bool(nw > 0)
+        persist = bool(nw > 0) and d.get("persistent_workers", True)
+        prefetch = d.get("prefetch_factor", 4 if nw > 0 else None)
 
         collate = (lambda b: cap3d_collate(b, tokenizer=self.tokenizer, max_length=64))
 
         train_loader = DataLoader(
             self.train_dataset, batch_size=bs, shuffle=True,
             num_workers=nw, pin_memory=pin, persistent_workers=persist,
+            prefetch_factor=prefetch,
             drop_last=True, collate_fn=collate
         )
         val_loader = DataLoader(
             self.val_dataset, batch_size=bs, shuffle=False,
             num_workers=nw, pin_memory=pin, persistent_workers=persist,
+            prefetch_factor=prefetch,
             drop_last=False, collate_fn=collate
         )
         return train_loader, val_loader

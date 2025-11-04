@@ -5,8 +5,10 @@ data:
   split_val: "validation"
   streaming: true
   point_cloud_size: 1024
-  batch_size: 16
-  num_workers: 0
+  batch_size: 64          # Increased for H100 (was 16)
+  num_workers: 12         # Increased from 2 for better data loading parallelism
+  prefetch_factor: 4      # Prefetch 4 batches per worker
+  persistent_workers: true # Keep workers alive between epochs
 
 model:
   encoder_type: "dgcnn"  # "point_bert" or "dgcnn"
@@ -28,6 +30,7 @@ training:
   save_top_k: 3
   amp: true
   pad_token_id: -100
+  # use_compile: true  # Enable torch.compile for H100 optimization
 
 evaluation:
   metrics: ["bleu", "cider", "rouge-l", "bertscore"]
