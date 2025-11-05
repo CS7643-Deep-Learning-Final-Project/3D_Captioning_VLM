@@ -11,6 +11,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 import math
 from typing import Any, Dict, List, Union, Optional
+from torch.profiler import profile, ProfilerActivity
 
 
 class Trainer:
@@ -173,10 +174,11 @@ class Trainer:
         self.optimizer.zero_grad(set_to_none=True)
 
         # --- train_epoch ---
+        # with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA]) as prof:
         for step, batch in enumerate(self.train_loader, start=1):
             batch = self._move_to_device(batch)
             with torch.cuda.amp.autocast(enabled=self.use_amp):
-                outputs = self.model.forward(**{k: v for k, v in batch.items() if k != "references"})
+                outputs = self.model(**{k: v for k, v in batch.items() if k != "references"})
                 loss = self._compute_loss_from_outputs(outputs, batch) / accum
 
             self.scaler.scale(loss).backward()
@@ -199,6 +201,8 @@ class Trainer:
                 lr = self.optimizer.param_groups[0]["lr"]
                 print(f"[Epoch {epoch} | Step {step}/{len(self.train_loader)}] "
                     f"loss={running / count:.4f} lr={lr:.2e}")
+        # print("PRINTING ACG")
+        # print(prof.key_averages().table())
 
         if self._per_epoch_scheduler: # step only per-epoch schedulers here
             self.scheduler.step()
