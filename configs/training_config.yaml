@@ -9,10 +9,12 @@ data:
   num_workers: 0
 
 model:
-  encoder_type: "dgcnn"  # "point_bert" or "dgcnn"
+  encoder_type: "dgcnn"
   embed_dim: 768
   output_dim: 2048
   decoder_name: "gpt2"
+  freeze_encoder: true
+  freeze_decoder: true
 
 training:
   learning_rate: 1.0e-5
