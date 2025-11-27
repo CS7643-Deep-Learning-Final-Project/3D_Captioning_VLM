@@ -37,13 +37,17 @@ class CaptionModel(nn.Module):
         # Responsibilities:
         # - Initialize encoder via EncoderFactory
         self.encoder = EncoderFactory.create_encoder(config['encoder_type'], config['output_dim'])
+        if config.get("freeze_encoder", False):
+            self.freeze_encoder()
+
         # - Initialize projection layer (input_dim=encoder_dim, output_dim=decoder_dim)
         self.projection = ProjectionLayer(input_dim=config['output_dim'], output_dim=config['embed_dim'])
         # - Initialize decoder (e.g., GPT2Decoder)
         self.decoder = GPT2Decoder(model_name=config['decoder_name'])
-        # - Handle optional freezing of encoder weights
+        if config.get("freeze_decoder", False) and hasattr(self.decoder, "freeze_backbone"):
+            self.decoder.freeze_backbone()
 
-    def forward(self, point_clouds: torch.Tensor, caption: Optional[List[str]] = None) -> Any:
+    def forward(self, point_clouds: torch.Tensor, caption: Optional[List[str]] = None):
         """
         Complete forward pass for training and inference.
 
@@ -66,7 +70,7 @@ class CaptionModel(nn.Module):
         else:
             return self.decoder(f)
 
-    def generate(self, point_clouds: torch.Tensor, **gen_kwargs) -> List[str]:
+    def generate(self, point_clouds: torch.Tensor, **gen_kwargs):
         """
         Generate captions for given 3D inputs (inference only).
 
@@ -80,16 +84,24 @@ class CaptionModel(nn.Module):
         # Responsibilities:
         # - Compute visual embeddings
         # - Run decoder.generate() with projected features
-        pass
+        was_training = self.training
+        try:
+            self.eval()
+            with torch.no_grad():
+                feats = self.encoder(point_clouds)
+                feats = self.projection(feats)
+                return self.decoder.generate(feats, **gen_kwargs)
+        finally:
+            if was_training:
+                self.train()
 
     def freeze_encoder(self) -> None:
         """
         Optionally freeze encoder weights during training to reduce compute and overfitting.
         """
-        # Example:
-        # for param in self.encoder.parameters():
-        #     param.requires_grad = False
-        pass
+        self.encoder.eval()
+        for param in self.encoder.parameters():
+            param.requires_grad = False
 
 
 __all__ = ["CaptionModel"]
