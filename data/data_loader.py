@@ -24,11 +24,11 @@ class Cap3DDataset(Dataset):
         point_cloud_size: int = 1024,
         tokenizer: Optional[Any] = None,
         profile_io: bool = False,
-    profile_every: int = 50,
-    use_cache: bool = False,
-    cache_dir: Optional[str] = None,
-    populate_cache: bool = False,
-    max_samples: Optional[int] = None
+        profile_every: int = 50,
+        use_cache: bool = False,
+        cache_dir: Optional[str] = None,
+        populate_cache: bool = False,
+        max_samples: Optional[int] = None
     ):
         """
         Args:
@@ -50,6 +50,7 @@ class Cap3DDataset(Dataset):
         self.max_samples = int(max_samples) if max_samples is not None else None
         self.cache_dir = Path(cache_dir).expanduser() if cache_dir else None
         self.populate_cache_flag = bool(populate_cache)
+        self._building_cache = False
         if self.use_cache:
             if self.cache_dir is None:
                 self.cache_dir = Path("cache/pointclouds")
@@ -240,14 +241,17 @@ class Cap3DDataset(Dataset):
                 except OSError:
                     pass
 
-        if cache_path is None:
-            pts_tensor = self._load_and_preprocess(idx, sample_meta, enable_profile)
-        else:
-            if self.populate_cache_flag:
-                raise RuntimeError(
-                    "Cache miss detected during training even though populate_cache=True."
-                )
-            pts_tensor = self._load_and_preprocess(idx, sample_meta, enable_profile)
+        cache_missing = cache_path is not None and (not cache_path.exists())
+        cache_miss_is_error = (
+            cache_missing and self.use_cache and self.populate_cache_flag and not self._building_cache
+        )
+
+        if cache_miss_is_error:
+            raise RuntimeError(
+                "Cache miss detected during training even though populate_cache=True."
+            )
+
+        pts_tensor = self._load_and_preprocess(idx, sample_meta, enable_profile)
 
         if cache_path is not None:
             try:
@@ -270,19 +274,23 @@ class Cap3DDataset(Dataset):
         print(f"[Cap3DDataset] Populating cache for {limit}/{total} samples in '{self.split}' split...")
         t0 = time.perf_counter()
         progress_interval = max(1, limit // 10)
-        for idx in range(limit):
-            sample_meta = self.samples[idx]
-            cache_path = self._cache_path(sample_meta["uid"])
-            if cache_path is not None and cache_path.exists():
+        self._building_cache = True
+        try:
+            for idx in range(limit):
+                sample_meta = self.samples[idx]
+                cache_path = self._cache_path(sample_meta["uid"])
+                if cache_path is not None and cache_path.exists():
+                    if idx % progress_interval == 0:
+                        pct = (idx / max(1, limit)) * 100.0
+                        print(f"  - {idx}/{limit} cached ({pct:.1f}%) (hit)")
+                    continue
+                sample = self.__getitem__(idx)
                 if idx % progress_interval == 0:
                     pct = (idx / max(1, limit)) * 100.0
                     print(f"  - {idx}/{limit} cached ({pct:.1f}%)")
-                continue
-            _ = self.__getitem__(idx)
-            if idx % progress_interval == 0:
-                pct = (idx / max(1, limit)) * 100.0
-                print(f"  - {idx}/{limit} cached ({pct:.1f}%)")
-            del _
+                del sample
+        finally:
+            self._building_cache = False
         elapsed = time.perf_counter() - t0
         print(f"[Cap3DDataset] Cache population complete in {elapsed:.2f}s")
     
