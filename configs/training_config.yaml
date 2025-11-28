@@ -7,6 +7,8 @@ data:
   point_cloud_size: 1024
   batch_size: 32
   num_workers: 5
+  profile_io: true
+  profile_every: 20
 
 model:
   encoder_type: "dgcnn"
@@ -30,6 +32,8 @@ training:
   save_top_k: 3
   amp: true
   pad_token_id: -100
+  log_timing: true
+  log_every: 10
 
 evaluation:
   metrics: ["bleu", "cider", "rouge-l", "bertscore"]

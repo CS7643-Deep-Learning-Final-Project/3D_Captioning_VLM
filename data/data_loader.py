@@ -7,6 +7,7 @@ import pandas as pd
 import pickle
 import hashlib
 import zipfile, io, os
+import time
 
 class Cap3DDataset(Dataset):
     """
@@ -20,7 +21,9 @@ class Cap3DDataset(Dataset):
         hf_file: str = "Cap3D_automated_ShapeNet.csv",
         split: str = "train",
         point_cloud_size: int = 1024,
-        tokenizer: Optional[Any] = None
+        tokenizer: Optional[Any] = None,
+        profile_io: bool = False,
+        profile_every: int = 50
     ):
         """
         Args:
@@ -36,16 +39,23 @@ class Cap3DDataset(Dataset):
         self.point_cloud_size = point_cloud_size
         self.tokenizer = tokenizer
         self.zip_cache = {}
+        self.profile_io = profile_io
+        self.profile_every = max(1, int(profile_every))
         self.load_data()
     
     def _get_zip_path(self, zip_name: str):
         if zip_name not in self.zip_cache:
+            t0 = time.perf_counter() if self.profile_io else None
             self.zip_cache[zip_name] = hf_hub_download(
                 repo_id=self.hf_repo,
                 filename=f"PointCloud_zips_ShapeNet/{zip_name}",
                 repo_type="dataset"
             )
-            print("Downloaded zip path:", self.zip_cache[zip_name])
+            if self.profile_io:
+                elapsed = time.perf_counter() - t0 if t0 is not None else 0.0
+                print(f"[Cap3DDataset] downloaded {zip_name} in {elapsed:.2f}s -> {self.zip_cache[zip_name]}")
+            else:
+                print("Downloaded zip path:", self.zip_cache[zip_name])
         return self.zip_cache[zip_name]
 
     def _uid_bucket(self, uid: str):
@@ -150,7 +160,10 @@ class Cap3DDataset(Dataset):
         """
         try:
             s = self.samples[idx]
+            enable_profile = self.profile_io and (idx % self.profile_every == 0)
+            t_start = time.perf_counter() if enable_profile else None
             zip_path = self._get_zip_path(s["zip"])
+            t_after_zip = time.perf_counter() if enable_profile else None
             
             with zipfile.ZipFile(zip_path) as zf:
                 names = set(zf.namelist())
@@ -161,8 +174,12 @@ class Cap3DDataset(Dataset):
                         raise FileNotFoundError(f"{s['member']} not found in {zip_path}")
 
                 with zf.open(member) as f:
-                    from plyfile import PlyData
-                    v = PlyData.read(io.BytesIO(f.read()))["vertex"].data
+                    data_bytes = f.read()
+
+            t_after_read = time.perf_counter() if enable_profile else None
+
+            from plyfile import PlyData
+            v = PlyData.read(io.BytesIO(data_bytes))["vertex"].data
 
             cols = [c for c in ("x","y","z","nx","ny","nz","red","green","blue") if c in v.dtype.names]
             if not {"x","y","z"}.issubset(cols):
@@ -170,7 +187,18 @@ class Cap3DDataset(Dataset):
             pts = np.column_stack([v[c] for c in cols]).astype(np.float32)
 
             pts = self.preprocess_point_cloud(pts)
+            t_after_preprocess = time.perf_counter() if enable_profile else None
             sample = {"point_clouds": torch.from_numpy(pts), "caption": s["caption"]}
+
+            if enable_profile and t_start is not None:
+                zip_time = (t_after_zip - t_start) if (t_after_zip is not None) else 0.0
+                read_time = (t_after_read - (t_after_zip or t_start)) if t_after_read is not None else 0.0
+                preprocess_time = (t_after_preprocess - (t_after_read or t_after_zip or t_start)) if t_after_preprocess is not None else 0.0
+                total_time = (t_after_preprocess - t_start) if (t_after_preprocess is not None) else 0.0
+                print(
+                    f"[Cap3DDataset] idx={idx} zip={os.path.basename(zip_path)} "
+                    f"open={zip_time:.3f}s read={read_time:.3f}s preprocess={preprocess_time:.3f}s total={total_time:.3f}s"
+                )
 
             return sample
         
@@ -228,6 +256,8 @@ class DataModule:
             hf_file=d.get("hf_file", "Cap3D_automated_ShapeNet.csv"),
             point_cloud_size=d.get("point_cloud_size", 1024),
             tokenizer=self.tokenizer,
+            profile_io=bool(d.get("profile_io", False)),
+            profile_every=int(d.get("profile_every", 50)),
         )
         self.train_dataset = Cap3DDataset(split=d.get("split_train", "train"), **shared)
         self.val_dataset   = Cap3DDataset(split=d.get("split_val", "val"), **shared)

@@ -6,6 +6,7 @@ Handles checkpointing, progress tracking, and metric evaluation.
 """
 
 import os
+import time
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -69,6 +70,8 @@ class Trainer:
         self.save_top_k = train_cfg.get("save_top_k", 3)
         self.main_metric = eval_cfg.get("main_metric", "cider")
         self.use_amp = bool(train_cfg.get("amp", True) and torch.cuda.is_available())
+        self.log_timing = bool(train_cfg.get("log_timing", False))
+        self._sync_cuda_timing = self.log_timing and hasattr(self.device, "type") and self.device.type == "cuda"
     
         # initialize components
         self.optimizer = self._build_optimizer(self.optimizer_name, self.lr, self.weight_decay)
@@ -171,10 +174,31 @@ class Trainer:
         count = 0
         accum = max(1, self.grad_accum_steps)
         self.optimizer.zero_grad(set_to_none=True)
+        prev_time = time.perf_counter()
+        data_time_sum = 0.0
+        device_time_sum = 0.0
+        compute_time_sum = 0.0
+        iter_time_sum = 0.0
 
         # --- train_epoch ---
         for step, batch in enumerate(self.train_loader, start=1):
+            if self.log_timing:
+                iter_start = time.perf_counter()
+                data_time = iter_start - prev_time
+            else:
+                iter_start = None
+                data_time = 0.0
+
+            if self.log_timing:
+                device_start = time.perf_counter()
             batch = self._move_to_device(batch)
+            if self.log_timing:
+                device_time = time.perf_counter() - device_start
+            else:
+                device_time = 0.0
+
+            if self.log_timing:
+                compute_start = time.perf_counter()
             with torch.cuda.amp.autocast(enabled=self.use_amp):
                 outputs = self.model.forward(**{k: v for k, v in batch.items() if k != "references"})
                 loss = self._compute_loss_from_outputs(outputs, batch) / accum
@@ -192,13 +216,38 @@ class Trainer:
                 if self._per_step_scheduler:
                     self.scheduler.step()
 
+            if self.log_timing:
+                if self._sync_cuda_timing:
+                    torch.cuda.synchronize(self.device)
+                compute_end = time.perf_counter()
+                compute_time = compute_end - compute_start
+                iter_total = compute_end - iter_start
+                prev_time = compute_end
+                data_time_sum += data_time
+                device_time_sum += device_time
+                compute_time_sum += compute_time
+                iter_time_sum += iter_total
+            else:
+                prev_time = time.perf_counter()
+
             running += loss.item() * accum
             count += 1
             log_every = int(self.config.get("training", {}).get("log_every", 50))
             if step % log_every == 0:
                 lr = self.optimizer.param_groups[0]["lr"]
-                print(f"[Epoch {epoch} | Step {step}/{len(self.train_loader)}] "
-                    f"loss={running / count:.4f} lr={lr:.2e}")
+                msg = (
+                    f"[Epoch {epoch} | Step {step}/{len(self.train_loader)}] "
+                    f"loss={running / count:.4f} lr={lr:.2e}"
+                )
+                if self.log_timing and step > 0:
+                    denom = float(step)
+                    msg += (
+                        f" avg_data={data_time_sum / denom:.3f}s"
+                        f" avg_to_device={device_time_sum / denom:.3f}s"
+                        f" avg_compute={compute_time_sum / denom:.3f}s"
+                        f" avg_iter={iter_time_sum / denom:.3f}s"
+                    )
+                print(msg)
 
         if self._per_epoch_scheduler: # step only per-epoch schedulers here
             self.scheduler.step()
