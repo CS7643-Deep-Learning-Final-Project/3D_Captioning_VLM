@@ -235,7 +235,7 @@ class Cap3DDataset(Dataset):
         if cache_path is not None and cache_path.exists():
             try:
                 t0 = time.perf_counter() if enable_profile else None
-                pts_tensor = torch.load(cache_path, map_location="cpu")
+                pts_tensor = torch.load(cache_path, map_location="cpu", weights_only=True)
                 if enable_profile and t0 is not None:
                     elapsed = time.perf_counter() - t0
                     print(f"[Cap3DDataset] idx={idx} cache_hit {cache_path.name} load={elapsed:.3f}s")

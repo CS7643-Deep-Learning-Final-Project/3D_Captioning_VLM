@@ -39,8 +39,8 @@ def select_device(preference: str) -> torch.device:
 
 def build_dataset(data_cfg: dict, split: str, max_samples: int | None) -> Cap3DDataset:
     cfg = dict(data_cfg) if data_cfg is not None else {}
-    cfg.setdefault("profile_io", False)
-    cfg.setdefault("populate_cache", False)
+    cfg["profile_io"] = False  # avoid verbose I/O logs when visualizing
+    cfg["populate_cache"] = False  # never pre-populate the entire split here
     if max_samples is not None:
         cfg["max_samples"] = max_samples
     return Cap3DDataset(
@@ -99,7 +99,8 @@ def visualize(args: argparse.Namespace) -> None:
 
     device = select_device(args.device)
 
-    dataset = build_dataset(data_cfg, split=args.split, max_samples=args.max_samples)
+    sample_cap = args.max_samples if args.max_samples is not None else args.num_examples
+    dataset = build_dataset(data_cfg, split=args.split, max_samples=sample_cap)
     if len(dataset) == 0:
         raise RuntimeError(f"No samples available for split '{args.split}'.")
 
