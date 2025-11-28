@@ -128,14 +128,21 @@ class Cap3DDataset(Dataset):
         """
         Stable 80/10/10 by per-UID bucket: [0,.8)->train, [.8,.9)->val, [.9,1)->test.
         """
-        if self.split == "all":
+        split_name = (self.split or "").strip().lower()
+
+        if split_name == "all":
             return [{k: v for k, v in s.items() if k != "_bucket"} for s in all_samples]
 
         def keep(b):
-            if self.split == "train": return b < 0.8
-            if self.split == "val":   return 0.8 <= b < 0.9
-            if self.split == "test":  return b >= 0.9
-            raise ValueError(f"Unknown split: {self.split}")
+            if split_name == "train":
+                return b < 0.8
+            if split_name == "val":
+                return 0.8 <= b < 0.9
+            if split_name == "test":
+                return b >= 0.9
+            raise ValueError(
+                f"Unknown split '{self.split}'. Expected 'train', 'val', or 'test'."
+            )
 
         out = [ {k: v for k, v in s.items() if k != "_bucket"}
                 for s in all_samples if keep(s["_bucket"]) ]

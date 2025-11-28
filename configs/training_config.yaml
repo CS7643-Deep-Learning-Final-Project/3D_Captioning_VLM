@@ -2,7 +2,7 @@ data:
   hf_repo: "tiange/Cap3D"
   hf_file: "Cap3D_automated_ShapeNet.csv"
   split_train: "train"     # or custom slice/filter logic
-  split_val: "validation"
+  split_val: "val"
   streaming: true
   point_cloud_size: 1024
   batch_size: 32
@@ -12,7 +12,6 @@ data:
   use_cache: true
   cache_dir: "cache/pointclouds"
   populate_cache: true
-  max_samples: 2000
 
 model:
   encoder_type: "dgcnn"

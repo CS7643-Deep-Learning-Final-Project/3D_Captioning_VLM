@@ -99,8 +99,18 @@ def main():
     parser.add_argument(
         "-c", "--config", default="configs/training_config.yaml", help="Path to YAML config"
     )
+    parser.add_argument(
+        "--max-samples",
+        type=int,
+        default=None,
+        help="Limit number of samples per split (overrides data.max_samples).",
+    )
     args = parser.parse_args()
     config = load_config(args.config)
+
+    if args.max_samples is not None:
+        config.setdefault("data", {})["max_samples"] = int(args.max_samples)
+
     device, datamodule, model = setup_environment(config)
 
     # Dataloaders
