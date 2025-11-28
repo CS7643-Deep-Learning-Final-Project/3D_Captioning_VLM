@@ -7,7 +7,7 @@ data:
   point_cloud_size: 1024
   batch_size: 32
   num_workers: 5
-  profile_io: false
+  profile_io: true
   profile_every: 100
   use_cache: true
   cache_dir: "cache/pointclouds"
