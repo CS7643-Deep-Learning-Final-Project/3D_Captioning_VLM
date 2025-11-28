@@ -150,8 +150,8 @@ class Cap3DDataset(Dataset):
 
     def preprocess_point_cloud(self, points: np.ndarray):
         """
-        Center to centroid, scale to unit sphere, and sample/pad to a fixed size.
-        Assumes points shape (N, 3[+f]); only XYZ are normalized; extra features are kept.
+        Validate and sample/pad a point cloud without altering its original scale.
+        Assumes points shape (N, 3[+f]); extra features are kept.
         """
         if points.ndim != 2 or points.shape[1] < 3:
             raise ValueError(f"Expected (N, 3[+f]) array, got {points.shape}")
@@ -164,21 +164,15 @@ class Cap3DDataset(Dataset):
         if not np.any(mask):
             raise ValueError("All points are non-finite.")
         pts = pts[mask]
-        xyz = pts[:, :3]
 
-        # Normalize: center and scale to unit sphere
-        centroid = xyz.mean(axis=0, keepdims=True)
-        xyz -= centroid
-        scale = np.linalg.norm(xyz, axis=1).max()
-        scale = scale if scale > 0 else 1.0
-        xyz /= scale
-        pts[:, :3] = xyz
-
-        # Sample/pad to fixed size
+        # Sample/pad to fixed size without modifying coordinates
         n = pts.shape[0]
-        m = self.point_cloud_size
-        idx = np.random.choice(n, m, replace=(n < m))
+        if n == 0:
+            raise ValueError("Point cloud has no valid points after filtering.")
 
+        m = self.point_cloud_size
+        replace = n < m
+        idx = np.random.choice(n, m, replace=replace)
         return pts[idx]
 
     def _load_and_preprocess(self, idx: int, sample_meta: Dict[str, Any], enable_profile: bool) -> torch.Tensor:
