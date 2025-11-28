@@ -389,26 +389,30 @@ class Trainer:
     
     def _maybe_register_topk(self, path: str, score: float):
         """
-        Keep only top-k checkpoints by the tracked metric.
+        Keep only top-k checkpoints. Never delete the newly saved checkpoint.
         """
         self.best_scores.append(score)
         self.saved_ckpts.append(path)
-        # sort (higher is better)
-        pairs = sorted(zip(self.best_scores, self.saved_ckpts), key=lambda x: x[0], reverse=True)
-        # truncate
-        if len(pairs) > self.save_top_k:
-            # delete the extras from disk
-            for _, p in pairs[self.save_top_k:]:
+
+        pairs = list(zip(self.best_scores, self.saved_ckpts))
+        newest = (score, path)
+
+        ranked = sorted(pairs, key=lambda x: x[0], reverse=True)
+        keep = ranked[: self.save_top_k]
+        if newest not in keep:
+            keep.append(newest)
+
+        keep_paths = {p for _, p in keep}
+        for _, p in pairs:
+            if p not in keep_paths and os.path.exists(p):
                 try:
-                    if os.path.exists(p):
-                        os.remove(p)
-                        print(f"Removed old checkpoint: {p}")
+                    os.remove(p)
+                    print(f"Removed old checkpoint: {p}")
                 except Exception as e:
                     print(f"Warning: failed to remove {p}: {e}")
-            pairs = pairs[:self.save_top_k]
-        # unpack back
-        self.best_scores = [s for s, _ in pairs]
-        self.saved_ckpts = [p for _, p in pairs]
+
+        self.best_scores = [s for s, _ in keep]
+        self.saved_ckpts = [p for _, p in keep]
 
 
 __all__ = ["Trainer"]
