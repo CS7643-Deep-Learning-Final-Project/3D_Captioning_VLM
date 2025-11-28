@@ -274,17 +274,13 @@ class Trainer:
         for batch in self.val_loader:
             batch = self._move_to_device(batch)
 
-            # Determine visual embeddings
-            if "visual_embeddings" in batch and torch.is_tensor(batch["visual_embeddings"]):
-                vemb = batch["visual_embeddings"]
-            elif hasattr(self.model, "encode") and callable(getattr(self.model, "encode")) and "visual" in batch:
-                vemb = self.model.encode(batch["visual"])
-            else:
-                raise RuntimeError("Validation requires 'visual_embeddings' in batch or model.encode(visual).")
+            point_clouds = batch.get("point_clouds")
+            if point_clouds is None or not torch.is_tensor(point_clouds):
+                raise RuntimeError("Validation requires 'point_clouds' tensor in batch for generation.")
 
             # Generate captions (expects model.generate to return List[str] or List[List[int]] decoded internally)
             gen = self.model.generate(
-                visual_embeddings=vemb,
+                point_clouds=point_clouds,
                 max_length=self.gen_max_length,
                 num_beams=self.gen_num_beams,
             )
@@ -300,7 +296,9 @@ class Trainer:
             predictions.extend(preds)
 
             # References: batch may provide ["references"] as List[List[str]] or List[str]
-            refs = batch.get("references", None)
+            refs = batch.get("references")
+            if refs is None:
+                refs = batch.get("caption")
             if refs is None:
                 raise RuntimeError("Validation dataloader must yield 'references' per sample.")
             # Normalize refs to List[List[str]]
