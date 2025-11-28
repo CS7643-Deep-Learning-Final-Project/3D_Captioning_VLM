@@ -24,10 +24,11 @@ class Cap3DDataset(Dataset):
         point_cloud_size: int = 1024,
         tokenizer: Optional[Any] = None,
         profile_io: bool = False,
-        profile_every: int = 50,
-        use_cache: bool = False,
-        cache_dir: Optional[str] = None,
-        populate_cache: bool = False
+    profile_every: int = 50,
+    use_cache: bool = False,
+    cache_dir: Optional[str] = None,
+    populate_cache: bool = False,
+    max_samples: Optional[int] = None
     ):
         """
         Args:
@@ -46,6 +47,7 @@ class Cap3DDataset(Dataset):
         self.profile_io = profile_io
         self.profile_every = max(1, int(profile_every))
         self.use_cache = bool(use_cache)
+        self.max_samples = int(max_samples) if max_samples is not None else None
         self.cache_dir = Path(cache_dir).expanduser() if cache_dir else None
         self.populate_cache_flag = bool(populate_cache)
         if self.use_cache:
@@ -114,6 +116,12 @@ class Cap3DDataset(Dataset):
 
         total_original = len(all_samples)
         print(f"Split distribution: {len(self.samples)}/{total_original} ({len(self.samples)/total_original:.1%}) for '{self.split}'")
+        if self.max_samples is not None and len(self.samples) > self.max_samples:
+            original = len(self.samples)
+            self.samples = self.samples[: self.max_samples]
+            print(
+                f"Split '{self.split}': truncating to {len(self.samples)} of {original} samples per max_samples setting"
+            )
 
     def _filter_split(self, all_samples):
         """
@@ -341,8 +349,16 @@ class DataModule:
             cache_dir=d.get("cache_dir"),
             populate_cache=bool(d.get("populate_cache", False)),
         )
-        self.train_dataset = Cap3DDataset(split=d.get("split_train", "train"), **shared)
-        self.val_dataset   = Cap3DDataset(split=d.get("split_val", "val"), **shared)
+        base_limit = d.get("max_samples")
+        train_limit = d.get("train_max_samples", base_limit)
+        val_limit = d.get("val_max_samples", base_limit)
+
+        self.train_dataset = Cap3DDataset(
+            split=d.get("split_train", "train"), max_samples=train_limit, **shared
+        )
+        self.val_dataset = Cap3DDataset(
+            split=d.get("split_val", "val"), max_samples=val_limit, **shared
+        )
 
     def get_dataloaders(self):
         """

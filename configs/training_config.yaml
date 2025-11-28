@@ -12,6 +12,7 @@ data:
   use_cache: true
   cache_dir: "cache/pointclouds"
   populate_cache: true
+  max_samples: 2000
 
 model:
   encoder_type: "dgcnn"
