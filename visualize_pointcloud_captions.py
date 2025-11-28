@@ -150,20 +150,26 @@ def visualize(args: argparse.Namespace) -> None:
 
             pts_np = pts.cpu().numpy()
             coords = pts_np[:, :3]
-
             colors = None
+            rgb = None
             if pts_np.shape[1] >= 9:
-                colors = pts_np[:, 6:9]
-                if colors.max() > 1.0:
-                    colors = colors / 255.0
-                colors = np.clip(colors, 0.0, 1.0)
+                # xyznxnynzrgb
+                rgb = pts_np[:, 6:9]
+            elif pts_np.shape[1] >= 6:
+                # xyzrgb
+                rgb = pts_np[:, 3:6]
+
+            if rgb is not None:
+                if rgb.max() > 1.0:
+                    rgb = rgb / 255.0
+                colors = np.clip(rgb, 0.0, 1.0)
 
             scatter_kwargs = {"s": 1.0, "alpha": 0.75}
             if colors is not None:
                 scatter_kwargs["c"] = colors
             else:
                 scatter_kwargs["color"] = "#1f77b4"
-
+            
             ax.scatter(coords[:, 0], coords[:, 1], coords[:, 2], **scatter_kwargs)
             ax.set_axis_off()
 
