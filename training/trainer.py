@@ -52,7 +52,6 @@ class Trainer:
         # core training hyperparameters
         self.lr = train_cfg.get("learning_rate", 1e-4)
         self.epochs = train_cfg.get("num_epochs", 10)
-        self.warmup_steps = train_cfg.get("warmup_steps", 0)
         self.gen_max_length = train_cfg.get("max_length", 128)
         self.eval_every = eval_cfg.get("eval_frequency", 1)
         self.metrics = eval_cfg.get("metrics", ["cider"])
@@ -79,6 +78,14 @@ class Trainer:
         self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
         steps_per_epoch = max(1, math.ceil(len(self.train_loader) / max(1, self.grad_accum_steps)))
         self.total_steps = self.epochs * steps_per_epoch
+        warmup_fraction = float(train_cfg.get("warmup_fraction", 0.05))
+        candidate_warmup = int(round(self.total_steps * warmup_fraction))
+        if train_cfg.get("warmup_steps") is not None:
+            candidate_warmup = int(train_cfg.get("warmup_steps"))
+        candidate_warmup = max(0, min(self.total_steps, candidate_warmup))
+        if candidate_warmup >= self.total_steps and self.total_steps > 0:
+            candidate_warmup = max(1, self.total_steps - 1)
+        self.warmup_steps = candidate_warmup
         self.scheduler = self._build_scheduler(self.scheduler_name, self.warmup_steps, self.step_size, self.gamma)
         
         self._per_step_scheduler = isinstance(self.scheduler, torch.optim.lr_scheduler.LambdaLR)

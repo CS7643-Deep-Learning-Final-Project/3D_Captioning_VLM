@@ -24,14 +24,14 @@ model:
 training:
   learning_rate: 1.0e-5
   num_epochs: 10
-  warmup_steps: 1000
+  warmup_fraction: 0.05
   max_length: 128
   optimizer: "adamw"
   scheduler: "cosine"
   weight_decay: 0.01
   grad_accum_steps: 1
   max_norm: 1.0
-  num_beams: 1
+  num_beams: 2
   save_top_k: 3
   amp: true
   pad_token_id: -100
