@@ -17,3 +17,4 @@ venv/
 # Logs and checkpoints
 *.log
 checkpoints/
+cache/

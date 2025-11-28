@@ -9,6 +9,9 @@ data:
   num_workers: 5
   profile_io: true
   profile_every: 20
+  use_cache: true
+  cache_dir: "cache/pointclouds"
+  populate_cache: true
 
 model:
   encoder_type: "dgcnn"

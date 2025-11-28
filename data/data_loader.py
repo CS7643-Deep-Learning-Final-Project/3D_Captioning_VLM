@@ -8,6 +8,7 @@ import pickle
 import hashlib
 import zipfile, io, os
 import time
+from pathlib import Path
 
 class Cap3DDataset(Dataset):
     """
@@ -23,7 +24,10 @@ class Cap3DDataset(Dataset):
         point_cloud_size: int = 1024,
         tokenizer: Optional[Any] = None,
         profile_io: bool = False,
-        profile_every: int = 50
+        profile_every: int = 50,
+        use_cache: bool = False,
+        cache_dir: Optional[str] = None,
+        populate_cache: bool = False
     ):
         """
         Args:
@@ -41,7 +45,16 @@ class Cap3DDataset(Dataset):
         self.zip_cache = {}
         self.profile_io = profile_io
         self.profile_every = max(1, int(profile_every))
+        self.use_cache = bool(use_cache)
+        self.cache_dir = Path(cache_dir).expanduser() if cache_dir else None
+        self.populate_cache_flag = bool(populate_cache)
+        if self.use_cache:
+            if self.cache_dir is None:
+                self.cache_dir = Path("cache/pointclouds")
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.load_data()
+        if self.use_cache and self.populate_cache_flag:
+            self.populate_cache()
     
     def _get_zip_path(self, zip_name: str):
         if zip_name not in self.zip_cache:
@@ -57,6 +70,12 @@ class Cap3DDataset(Dataset):
             else:
                 print("Downloaded zip path:", self.zip_cache[zip_name])
         return self.zip_cache[zip_name]
+
+    def _cache_path(self, uid: str) -> Optional[Path]:
+        if not self.use_cache or self.cache_dir is None:
+            return None
+        fname = f"{uid}_n{self.point_cloud_size}.pt"
+        return self.cache_dir / fname
 
     def _uid_bucket(self, uid: str):
         """Deterministic [0,1) bucket per UID, stable across runs/machines."""
@@ -146,32 +165,19 @@ class Cap3DDataset(Dataset):
 
         return pts[idx]
 
-    def __getitem__(self, idx: int):
-        """
-        Fetch one sample from the HF dataset (streaming or cached),
-        load the referenced point cloud, preprocess, tokenize caption.
-
-        Returns:
-            {
-              'points': torch.FloatTensor (N, 3[+f]),
-              'caption': str,
-              'tokens': Optional[torch.LongTensor]
-            }
-        """
+    def _load_and_preprocess(self, idx: int, sample_meta: Dict[str, Any], enable_profile: bool) -> torch.Tensor:
         try:
-            s = self.samples[idx]
-            enable_profile = self.profile_io and (idx % self.profile_every == 0)
             t_start = time.perf_counter() if enable_profile else None
-            zip_path = self._get_zip_path(s["zip"])
+            zip_path = self._get_zip_path(sample_meta["zip"])
             t_after_zip = time.perf_counter() if enable_profile else None
-            
+
             with zipfile.ZipFile(zip_path) as zf:
                 names = set(zf.namelist())
-                member = s["member"]
+                member = sample_meta["member"]
                 if member not in names:
                     member = f"ShapeNet_pcs/{member}"
                     if member not in names:
-                        raise FileNotFoundError(f"{s['member']} not found in {zip_path}")
+                        raise FileNotFoundError(f"{sample_meta['member']} not found in {zip_path}")
 
                 with zf.open(member) as f:
                     data_bytes = f.read()
@@ -187,8 +193,8 @@ class Cap3DDataset(Dataset):
             pts = np.column_stack([v[c] for c in cols]).astype(np.float32)
 
             pts = self.preprocess_point_cloud(pts)
+            pts_tensor = torch.from_numpy(pts)
             t_after_preprocess = time.perf_counter() if enable_profile else None
-            sample = {"point_clouds": torch.from_numpy(pts), "caption": s["caption"]}
 
             if enable_profile and t_start is not None:
                 zip_time = (t_after_zip - t_start) if (t_after_zip is not None) else 0.0
@@ -200,10 +206,77 @@ class Cap3DDataset(Dataset):
                     f"open={zip_time:.3f}s read={read_time:.3f}s preprocess={preprocess_time:.3f}s total={total_time:.3f}s"
                 )
 
-            return sample
-        
+            return pts_tensor
         except Exception as e:
-            raise RuntimeError(f"Failed uid={s.get('uid')} member={s.get('member')}: {e}")
+            raise RuntimeError(f"Failed uid={sample_meta.get('uid')} member={sample_meta.get('member')}: {e}")
+
+    def __getitem__(self, idx: int):
+        """Fetch a sample, using on-disk cache when enabled."""
+        sample_meta = self.samples[idx]
+        enable_profile = self.profile_io and (idx % self.profile_every == 0)
+        cache_path = self._cache_path(sample_meta["uid"])
+
+        if cache_path is not None and cache_path.exists():
+            try:
+                t0 = time.perf_counter() if enable_profile else None
+                pts_tensor = torch.load(cache_path, map_location="cpu")
+                if enable_profile and t0 is not None:
+                    elapsed = time.perf_counter() - t0
+                    print(f"[Cap3DDataset] idx={idx} cache_hit {cache_path.name} load={elapsed:.3f}s")
+                return {"point_clouds": pts_tensor, "caption": sample_meta["caption"]}
+            except Exception as cache_err:
+                if enable_profile:
+                    print(f"[Cap3DDataset] cache load failed for {cache_path}: {cache_err}; regenerating")
+                try:
+                    cache_path.unlink()
+                except OSError:
+                    pass
+
+        if cache_path is None:
+            pts_tensor = self._load_and_preprocess(idx, sample_meta, enable_profile)
+        else:
+            if self.populate_cache_flag:
+                raise RuntimeError(
+                    "Cache miss detected during training even though populate_cache=True."
+                )
+            pts_tensor = self._load_and_preprocess(idx, sample_meta, enable_profile)
+
+        if cache_path is not None:
+            try:
+                tmp_path = cache_path.with_suffix(cache_path.suffix + ".tmp")
+                torch.save(pts_tensor, tmp_path)
+                tmp_path.replace(cache_path)
+            except Exception as cache_err:
+                if enable_profile:
+                    print(f"[Cap3DDataset] cache save failed for {cache_path}: {cache_err}")
+
+        return {"point_clouds": pts_tensor, "caption": sample_meta["caption"]}
+
+    def populate_cache(self, max_items: Optional[int] = None) -> None:
+        if not self.use_cache or self.cache_dir is None:
+            print("[Cap3DDataset] populate_cache skipped: caching disabled.")
+            return
+
+        total = len(self.samples)
+        limit = total if max_items is None else min(total, max_items)
+        print(f"[Cap3DDataset] Populating cache for {limit}/{total} samples in '{self.split}' split...")
+        t0 = time.perf_counter()
+        progress_interval = max(1, limit // 10)
+        for idx in range(limit):
+            sample_meta = self.samples[idx]
+            cache_path = self._cache_path(sample_meta["uid"])
+            if cache_path is not None and cache_path.exists():
+                if idx % progress_interval == 0:
+                    pct = (idx / max(1, limit)) * 100.0
+                    print(f"  - {idx}/{limit} cached ({pct:.1f}%)")
+                continue
+            _ = self.__getitem__(idx)
+            if idx % progress_interval == 0:
+                pct = (idx / max(1, limit)) * 100.0
+                print(f"  - {idx}/{limit} cached ({pct:.1f}%)")
+            del _
+        elapsed = time.perf_counter() - t0
+        print(f"[Cap3DDataset] Cache population complete in {elapsed:.2f}s")
     
     def __len__(self):
         return len(self.samples)
@@ -237,7 +310,13 @@ class DataModule:
             - hf_repo, hf_file, split_train, split_val, point_cloud_size,
               batch_size, num_workers
         """
-        self.cfg = config
+        self.cfg = config if config is not None else {}
+        if isinstance(self.cfg, dict) and "data" in self.cfg:
+            self.data_cfg = self.cfg.get("data", {})
+        elif isinstance(self.cfg, dict):
+            self.data_cfg = self.cfg
+        else:
+            self.data_cfg = {}
         self.tokenizer = tokenizer
         self.train_dataset = None
         self.val_dataset = None
@@ -250,7 +329,7 @@ class DataModule:
             - Instantiate Cap3DDataset for 'train' and 'val'.
             - Apply consistent preprocessing and tokenizer settings.
         """
-        d = self.cfg.get("data", {})
+        d = self.data_cfg
         shared = dict(
             hf_repo=d.get("hf_repo", "tiange/Cap3D"),
             hf_file=d.get("hf_file", "Cap3D_automated_ShapeNet.csv"),
@@ -258,6 +337,9 @@ class DataModule:
             tokenizer=self.tokenizer,
             profile_io=bool(d.get("profile_io", False)),
             profile_every=int(d.get("profile_every", 50)),
+            use_cache=bool(d.get("use_cache", False)),
+            cache_dir=d.get("cache_dir"),
+            populate_cache=bool(d.get("populate_cache", False)),
         )
         self.train_dataset = Cap3DDataset(split=d.get("split_train", "train"), **shared)
         self.val_dataset   = Cap3DDataset(split=d.get("split_val", "val"), **shared)
@@ -273,7 +355,7 @@ class DataModule:
         if self.train_dataset is None or self.val_dataset is None:
             self.setup_datasets()
 
-        d = self.cfg.get("data", {})
+        d = self.data_cfg
         bs = d.get("batch_size", 16)
         nw = d.get("num_workers", 0)
         pin = torch.cuda.is_available()
