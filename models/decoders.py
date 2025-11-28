@@ -130,7 +130,7 @@ class GPT2Decoder(nn.Module):
 
         # input_embeds (B, 1, D)
         inputs_embeds = visual_embeddings.unsqueeze(1)
-        
+
         # attention mask (B, 1)
         attention_mask = torch.ones((B, 1), dtype=torch.long, device=device)
 
@@ -141,11 +141,9 @@ class GPT2Decoder(nn.Module):
             num_beams=num_beams,
             pad_token_id=self.tokenizer.pad_token_id,
             eos_token_id=self.tokenizer.eos_token_id,
-            early_stopping=True
         )
 
-        # convert token ID to text
-        # skip special tokens like <|endoftext|> and remove prefix
+        # convert token IDs to text and drop <|endoftext|>
         generated_text = self.tokenizer.batch_decode(
             output_ids,
             skip_special_tokens=True,
