@@ -37,12 +37,19 @@ def select_device(preference: str) -> torch.device:
     return torch.device("cpu")
 
 
-def build_dataset(data_cfg: dict, split: str, max_samples: int | None) -> Cap3DDataset:
+def build_dataset(
+    data_cfg: dict,
+    split: str,
+    max_samples: int | None,
+    point_cloud_size: int | None,
+) -> Cap3DDataset:
     cfg = dict(data_cfg) if data_cfg is not None else {}
     cfg["profile_io"] = False  # avoid verbose I/O logs when visualizing
     cfg["populate_cache"] = False  # never pre-populate the entire split here
     if max_samples is not None:
         cfg["max_samples"] = max_samples
+    if point_cloud_size is not None:
+        cfg["point_cloud_size"] = point_cloud_size
     return Cap3DDataset(
         hf_repo=cfg.get("hf_repo", "tiange/Cap3D"),
         hf_file=cfg.get("hf_file", "Cap3D_automated_ShapeNet.csv"),
@@ -100,7 +107,12 @@ def visualize(args: argparse.Namespace) -> None:
     device = select_device(args.device)
 
     sample_cap = args.max_samples if args.max_samples is not None else args.num_examples
-    dataset = build_dataset(data_cfg, split=args.split, max_samples=sample_cap)
+    dataset = build_dataset(
+        data_cfg,
+        split=args.split,
+        max_samples=sample_cap,
+        point_cloud_size=args.point_cloud_size,
+    )
     if len(dataset) == 0:
         raise RuntimeError(f"No samples available for split '{args.split}'.")
 
@@ -161,6 +173,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--split", default="val", choices=["train", "val", "test"], help="Dataset split")
     parser.add_argument("--num-examples", type=int, default=3, help="Number of examples to render")
     parser.add_argument("--max-samples", type=int, default=None, help="Optional cap on dataset samples for faster loading")
+    parser.add_argument(
+        "--point-cloud-size",
+        type=int,
+        default=None,
+        help="Number of points to sample from each point cloud (overrides config)",
+    )
     parser.add_argument("--device", default="auto", help="Computation device: auto|cpu|cuda[:idx]|mps")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for selecting samples")
     parser.add_argument("--output", default=None, help="Optional path to save figure instead of showing it")

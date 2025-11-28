@@ -76,7 +76,7 @@ class Trainer:
         # initialize components
         self.optimizer = self._build_optimizer(self.optimizer_name, self.lr, self.weight_decay)
         self.loss_fn = nn.CrossEntropyLoss(ignore_index=self.pad_token_id)
-        self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
+        self.scaler = torch.amp.GradScaler(device_type="cuda", enabled=self.use_amp)
         steps_per_epoch = max(1, math.ceil(len(self.train_loader) / max(1, self.grad_accum_steps)))
         self.total_steps = self.epochs * steps_per_epoch
         self.scheduler = self._build_scheduler(self.scheduler_name, self.warmup_steps, self.step_size, self.gamma)
