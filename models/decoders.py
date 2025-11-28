@@ -147,8 +147,8 @@ class GPT2Decoder(nn.Module):
         # convert token ID to text
         # skip special tokens like <|endoftext|> and remove prefix
         generated_text = self.tokenizer.batch_decode(
-            output_ids[:, 1:], # skip visual prefix
-            skip_special_tokens=True
+            output_ids,
+            skip_special_tokens=True,
         )
         
         return generated_text
