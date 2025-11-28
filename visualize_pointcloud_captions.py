@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import List
 
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 import yaml
 
@@ -148,7 +149,22 @@ def visualize(args: argparse.Namespace) -> None:
             generated = predictions[0] if isinstance(predictions, list) else str(predictions)
 
             pts_np = pts.cpu().numpy()
-            ax.scatter(pts_np[:, 0], pts_np[:, 1], pts_np[:, 2], s=1.0, alpha=0.75)
+            coords = pts_np[:, :3]
+
+            colors = None
+            if pts_np.shape[1] >= 9:
+                colors = pts_np[:, 6:9]
+                if colors.max() > 1.0:
+                    colors = colors / 255.0
+                colors = np.clip(colors, 0.0, 1.0)
+
+            scatter_kwargs = {"s": 1.0, "alpha": 0.75}
+            if colors is not None:
+                scatter_kwargs["c"] = colors
+            else:
+                scatter_kwargs["color"] = "#1f77b4"
+
+            ax.scatter(coords[:, 0], coords[:, 1], coords[:, 2], **scatter_kwargs)
             ax.set_axis_off()
 
             title = (
