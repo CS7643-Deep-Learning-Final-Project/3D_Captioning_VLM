@@ -149,7 +149,7 @@ def save_interactive_html(path: Path, plots: List[dict]) -> None:
         fig.add_annotation(
             text=plot["title_html"],
             x=(2 * idx - 1) / (2 * len(plots)),
-            y=-0.16,
+            y=-0.5,
             xref="paper",
             yref="paper",
             showarrow=False,
@@ -158,9 +158,9 @@ def save_interactive_html(path: Path, plots: List[dict]) -> None:
         )
 
     fig.update_layout(
-        margin=dict(l=0, r=0, t=24, b=140),
+        margin=dict(l=0, r=0, t=24, b=180),
         showlegend=False,
-        height=360,
+        height=500,
         width=320 * len(plots),
     )
 
