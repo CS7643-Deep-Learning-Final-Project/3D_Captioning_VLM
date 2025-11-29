@@ -16,7 +16,7 @@ class GPT2Decoder(nn.Module):
     Supports both training with teacher forcing and inference with beam search.
     """
 
-    def __init__(self, model_name: str = "gpt2", max_length: int = 128):
+    def __init__(self, model_name: str = "gpt2", max_length: int = 60):
         """
         Initialize GPT-2 model and tokenizer with specified parameters.
 
@@ -115,7 +115,7 @@ class GPT2Decoder(nn.Module):
     def generate(
         self,
         visual_embeddings: torch.Tensor,
-        max_length: int = 128,
+        max_length: int = 60,
         num_beams: int = 3,
         no_repeat_ngram_size: int = 3,
         repetition_penalty: float = 1.1,

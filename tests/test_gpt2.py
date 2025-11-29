@@ -31,7 +31,7 @@ def main() -> None:
 	train_cfg = cfg.get("training", {})
 
 	decoder_name = model_cfg.get("decoder_name", "gpt2")
-	max_length = int(train_cfg.get("max_length", 128))
+	max_length = int(train_cfg.get("max_length", 60))
 	num_beams = int(train_cfg.get("num_beams", 3))
 
 	decoder = GPT2Decoder(model_name=decoder_name, max_length=max_length)
