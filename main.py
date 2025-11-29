@@ -126,9 +126,18 @@ def main():
     trainer = Trainer(model, train_loader, val_loader, config, device)
 
     # Evaluator (allow kwargs if provided)
-    eval_cfg = config.get("evaluator", {})
+    evaluation_cfg = config.get("evaluation", {})
+    evaluator_kwargs: Dict[str, Any] = {}
+    if isinstance(evaluation_cfg, dict) and "metrics" in evaluation_cfg:
+        # Pass only the subset CaptionEvaluator understands.
+        evaluator_kwargs["metrics"] = evaluation_cfg.get("metrics")
+
+    explicit_cfg = config.get("evaluator", {})
+    if isinstance(explicit_cfg, dict):
+        evaluator_kwargs.update(explicit_cfg)
+
     try:
-        evaluator = CaptionEvaluator(**eval_cfg) if isinstance(eval_cfg, dict) else CaptionEvaluator()
+        evaluator = CaptionEvaluator(**evaluator_kwargs)
     except TypeError:
         evaluator = CaptionEvaluator()
 

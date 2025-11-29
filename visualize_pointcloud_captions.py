@@ -91,6 +91,62 @@ def format_caption(text: str, width: int = 48) -> str:
     return wrapped if wrapped else "<empty>"
 
 
+def save_interactive_html(path: Path, plots: List[dict]) -> None:
+    try:
+        from plotly.subplots import make_subplots
+        import plotly.graph_objects as go
+    except ImportError as exc:
+        raise RuntimeError(
+            "Plotly is required to export interactive visualizations. Install it with 'pip install plotly'."
+        ) from exc
+
+    if not plots:
+        raise ValueError("No plots available to render.")
+
+    fig = make_subplots(
+        rows=1,
+        cols=len(plots),
+        specs=[[{"type": "scene"} for _ in plots]],
+        subplot_titles=[plot["title_html"] for plot in plots],
+    )
+
+    for idx, plot in enumerate(plots, start=1):
+        coords = plot["coords"]
+        colors = plot["colors"]
+        if colors is None:
+            marker = {"size": 2, "opacity": 0.75, "color": "#1f77b4"}
+        else:
+            color_arr = (np.clip(colors, 0.0, 1.0) * 255).astype(np.uint8)
+            color_strings = [f"rgb({r},{g},{b})" for r, g, b in color_arr]
+            marker = {"size": 2, "opacity": 0.75, "color": color_strings}
+
+        fig.add_trace(
+            go.Scatter3d(
+                x=coords[:, 0],
+                y=coords[:, 1],
+                z=coords[:, 2],
+                mode="markers",
+                marker=marker,
+                hoverinfo="skip",
+            ),
+            row=1,
+            col=idx,
+        )
+
+        scene_name = f"scene{'' if idx == 1 else idx}"
+        fig.layout[scene_name].update(
+            xaxis=dict(visible=False),
+            yaxis=dict(visible=False),
+            zaxis=dict(visible=False),
+            aspectmode="data",
+        )
+
+    fig.update_layout(margin=dict(l=0, r=0, t=60, b=0), showlegend=False)
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.write_html(path, include_plotlyjs="cdn")
+
+
 def visualize(args: argparse.Namespace) -> None:
     config_path = Path(args.config).expanduser()
     checkpoint_path = Path(args.checkpoint).expanduser()
@@ -139,6 +195,8 @@ def visualize(args: argparse.Namespace) -> None:
         "num_beams": train_cfg.get("num_beams", 3),
     }
 
+    plot_records: List[dict] = []
+
     with torch.no_grad():
         for ax, idx in zip(axes, indices):
             sample = dataset[idx]
@@ -179,13 +237,30 @@ def visualize(args: argparse.Namespace) -> None:
             )
             ax.set_title(title, fontsize=9)
 
+            plot_records.append(
+                {
+                    "coords": coords,
+                    "colors": colors,
+                    "title_html": "<br>".join(title.splitlines()),
+                }
+            )
+
     output_path = Path(args.output).expanduser() if args.output else None
+    interactive_path = Path(args.interactive_output).expanduser() if args.interactive_output else None
+
+    should_show = not output_path and not interactive_path
+
     if output_path:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(output_path, dpi=200)
         print(f"Visualization saved to {output_path}")
-    else:
+    if interactive_path:
+        save_interactive_html(interactive_path, plot_records)
+        print(f"Interactive visualization saved to {interactive_path}")
+    if should_show:
         plt.show()
+    else:
+        plt.close(fig)
 
 
 def parse_args() -> argparse.Namespace:
@@ -204,6 +279,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", default="auto", help="Computation device: auto|cpu|cuda[:idx]|mps")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for selecting samples")
     parser.add_argument("--output", default=None, help="Optional path to save figure instead of showing it")
+    parser.add_argument(
+        "--interactive-output",
+        default=None,
+        help="Optional path to save an interactive HTML visualization",
+    )
     return parser.parse_args()
 
 
