@@ -124,14 +124,12 @@ class Cap3DDataset(Dataset):
         print(f"Split distribution: {len(self.samples)}/{total_original} ({len(self.samples)/total_original:.1%}) for '{self.split}'")
         if self.max_samples is not None and len(self.samples) > self.max_samples:
             original = len(self.samples)
-            # Prefer captions with the fewest tokens/characters for quicker inspection.
-            indexed = list(enumerate(self.samples))
-            indexed.sort(key=lambda pair: (len((pair[1].get("caption") or "").split()), len(pair[1].get("caption") or ""), pair[0]))
-            truncated = indexed[: self.max_samples]
-            truncated.sort(key=lambda pair: pair[0])
-            self.samples = [sample for _, sample in truncated]
+            rng = np.random.default_rng()
+            idx = rng.choice(len(self.samples), size=self.max_samples, replace=False)
+            idx.sort()
+            self.samples = [self.samples[i] for i in idx]
             print(
-                f"Split '{self.split}': selecting {len(self.samples)} shortest captions out of {original} per max_samples setting"
+                f"Split '{self.split}': selecting {len(self.samples)} random samples out of {original} per max_samples setting"
             )
 
     def _filter_split(self, all_samples):
