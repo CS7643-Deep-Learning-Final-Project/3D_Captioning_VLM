@@ -21,7 +21,7 @@ class Cap3DDataset(Dataset):
         hf_repo: str = "tiange/Cap3D",
         hf_file: str = "Cap3D_automated_ShapeNet.csv",
         split: str = "train",
-        point_cloud_size: int = 1024,
+        point_cloud_size: int = 2048,
         tokenizer: Optional[Any] = None,
         profile_io: bool = False,
         profile_every: int = 50,
@@ -350,7 +350,7 @@ class DataModule:
         shared = dict(
             hf_repo=d.get("hf_repo", "tiange/Cap3D"),
             hf_file=d.get("hf_file", "Cap3D_automated_ShapeNet.csv"),
-            point_cloud_size=d.get("point_cloud_size", 1024),
+            point_cloud_size=d.get("point_cloud_size", 2048),
             tokenizer=self.tokenizer,
             profile_io=bool(d.get("profile_io", False)),
             profile_every=int(d.get("profile_every", 50)),

@@ -4,7 +4,7 @@ data:
   split_train: "train"     # or custom slice/filter logic
   split_val: "val"
   streaming: true
-  point_cloud_size: 1024
+  point_cloud_size: 2048
   batch_size: 32
   num_workers: 5
   profile_io: true

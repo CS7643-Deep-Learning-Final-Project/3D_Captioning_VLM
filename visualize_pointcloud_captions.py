@@ -55,7 +55,7 @@ def build_dataset(
         hf_repo=cfg.get("hf_repo", "tiange/Cap3D"),
         hf_file=cfg.get("hf_file", "Cap3D_automated_ShapeNet.csv"),
         split=split,
-        point_cloud_size=cfg.get("point_cloud_size", 1024),
+        point_cloud_size=cfg.get("point_cloud_size", 2048),
         tokenizer=None,
         profile_io=bool(cfg.get("profile_io", False)),
         profile_every=int(cfg.get("profile_every", 50)),
