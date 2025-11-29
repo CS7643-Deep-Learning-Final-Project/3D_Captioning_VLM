@@ -93,7 +93,7 @@ class Cap3DDataset(Dataset):
         csv_path = hf_hub_download(repo_id=self.hf_repo,
                                 filename=self.hf_file,
                                 repo_type="dataset")
-        df = pd.read_csv(csv_path, header=None, names=["uid", "caption"], dtype=str)
+        df = pd.read_csv(csv_path, header=None, names=["uid", "category", "caption"], dtype=str)
 
         # single zip file
         zip_name = "compressed_pcs_00.zip"

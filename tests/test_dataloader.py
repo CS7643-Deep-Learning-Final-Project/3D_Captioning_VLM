@@ -11,7 +11,7 @@ def smoke_single_item():
     print("=== Single item load ===")
     ds = Cap3DDataset(
         hf_repo="tiange/Cap3D",
-    hf_file="Cap3D_automated_ABO.csv",
+        hf_file="Cap3D_automated_ABO.csv",
         split="train",
         point_cloud_size=512,  # smaller for quick test
     )
