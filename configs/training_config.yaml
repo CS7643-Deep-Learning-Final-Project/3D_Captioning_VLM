@@ -25,7 +25,7 @@ training:
   learning_rate: 1.0e-5
   num_epochs: 10
   warmup_fraction: 0.05
-  max_length: 128
+  max_length: 100
   optimizer: "adamw"
   scheduler: "cosine"
   weight_decay: 0.01
