@@ -399,7 +399,7 @@ class Trainer:
         if best_summary is not None:
             print("-----------------------")
             metrics_str = ", ".join(
-                f"{k}={v:.4f}" for k, v in best_summary["scores"].items()
+                f"{k}={v:.2f}" for k, v in best_summary["scores"].items()
             )
             if not metrics_str:
                 metrics_str = "n/a"
@@ -413,7 +413,7 @@ class Trainer:
             if point_dim is None:
                 point_dim = model_cfg.get("output_dim", "unknown")
             print(
-                "best_epoch={epoch} | best_metric={key}:{value:.4f} | metrics=[{metrics}] | "
+                "best_epoch={epoch} | best_metric={key}:{value:.2f} | metrics=[{metrics}] | "
                 "samples={samples} | prefix_tokens={prefix_tokens} | encoder={encoder} | "
                 "lr={lr:.2e} | pointcloud_dim={point_dim}".format(
                     epoch=best_summary["epoch"],
