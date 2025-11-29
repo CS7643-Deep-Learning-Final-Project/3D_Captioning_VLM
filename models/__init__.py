@@ -41,7 +41,12 @@ class CaptionModel(nn.Module):
             self.freeze_encoder()
 
         # - Initialize projection layer (input_dim=encoder_dim, output_dim=decoder_dim)
-        self.projection = ProjectionLayer(input_dim=config['output_dim'], output_dim=config['embed_dim'])
+        self.prefix_tokens = int(config.get("prefix_tokens", 1))
+        self.projection = ProjectionLayer(
+            input_dim=config['output_dim'],
+            output_dim=config['embed_dim'],
+            prefix_tokens=self.prefix_tokens,
+        )
         # - Initialize decoder (e.g., GPT2Decoder)
         self.decoder = GPT2Decoder(model_name=config['decoder_name'])
         if config.get("freeze_decoder", False) and hasattr(self.decoder, "freeze_backbone"):

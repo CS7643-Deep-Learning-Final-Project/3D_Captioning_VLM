@@ -43,7 +43,8 @@ class GPT2Decoder(nn.Module):
         Forward pass for both training and inference.
 
         Args:
-            visual_embeddings (torch.Tensor): Visual features from encoder of shape (B, embed_dim).
+            visual_embeddings (torch.Tensor): Visual features from encoder of shape (B, embed_dim)
+                or (B, prefix_len, embed_dim).
             captions (Optional[List[str]]): Ground-truth captions for teacher forcing (training only).
 
         Returns:
@@ -53,12 +54,20 @@ class GPT2Decoder(nn.Module):
         # - For training: concatenate visual tokens + caption tokens.
         # - For inference: pass visual context only.
         
+        # Ensure visual prefix has explicit sequence dimension
+        if visual_embeddings.ndim == 2:
+            visual_prefix = visual_embeddings.unsqueeze(1)
+        elif visual_embeddings.ndim == 3:
+            visual_prefix = visual_embeddings
+        else:
+            raise ValueError(
+                f"visual_embeddings must be rank 2 or 3, got {visual_embeddings.ndim}"
+            )
+
         # Training Mode
         if captions is not None:
-            B, D = visual_embeddings.shape
+            B, prefix_len, _ = visual_prefix.shape
             device = visual_embeddings.device
-
-            visual_prefix = visual_embeddings.unsqueeze(1)
 
             tok_out = self.tokenizer(
                 captions,
@@ -73,17 +82,17 @@ class GPT2Decoder(nn.Module):
             # (B, seq_len) -> (B, seq_len, D)
             caption_embeds = self.model.transformer.wte(input_ids)
 
-            # (B, 1, D) + (B, seq_len, D) -> (B, 1 + seq_len, D)
+            # (B, P, D) + (B, seq_len, D) -> (B, P + seq_len, D)
             inputs_embeds = torch.cat([visual_prefix, caption_embeds], dim=1)
-            
-            visual_mask = torch.ones((B, 1), dtype=torch.long, device=device)
-            # (B, 1) + (B, seq_len) -> (B, 1 + seq_len)
+
+            visual_mask = torch.ones((B, prefix_len), dtype=torch.long, device=device)
+            # (B, P) + (B, seq_len) -> (B, P + seq_len)
             combined_mask = torch.cat([visual_mask, attention_mask], dim=1)
 
-            prefix_labels = torch.full((B, 1), -100, dtype=torch.long, device=device)
+            prefix_labels = torch.full((B, prefix_len), -100, dtype=torch.long, device=device)
             # -100 will ignore padding token
             labels = torch.where(attention_mask == 1, input_ids, -100)
-            # (B, 1) + (B, seq_len) -> (B, 1 + seq_len)
+            # (B, P) + (B, seq_len) -> (B, P + seq_len)
             combined_labels = torch.cat([prefix_labels, labels], dim=1)
 
             outputs = self.model(
@@ -97,7 +106,7 @@ class GPT2Decoder(nn.Module):
         # Inference Mode
         else:
             generated_captions = self.generate(
-                visual_embeddings,
+                visual_prefix,
                 max_length=self.max_length,
                 num_beams=3
             )
@@ -115,7 +124,8 @@ class GPT2Decoder(nn.Module):
         Generate captions using beam search with visual features as conditioning.
 
         Args:
-            visual_embeddings (torch.Tensor): Encoded visual embeddings of shape (B, embed_dim).
+            visual_embeddings (torch.Tensor): Encoded visual embeddings of shape (B, embed_dim)
+                or (B, prefix_len, embed_dim).
             max_length (int): Maximum generation length.
             num_beams (int): Number of beams for beam search decoding.
             no_repeat_ngram_size (int): Penalize repeated n-grams of this size.
@@ -129,14 +139,22 @@ class GPT2Decoder(nn.Module):
         # - Use GPT-2's generate() with beam search.
         # - Decode token IDs into human-readable text strings.
         self.model.eval() # switch to eval mode
-        B, D = visual_embeddings.shape
         device = visual_embeddings.device
 
-        # input_embeds (B, 1, D)
-        inputs_embeds = visual_embeddings.unsqueeze(1)
+        if visual_embeddings.ndim == 2:
+            inputs_embeds = visual_embeddings.unsqueeze(1)
+        elif visual_embeddings.ndim == 3:
+            inputs_embeds = visual_embeddings
+        else:
+            raise ValueError(
+                f"visual_embeddings must be rank 2 or 3, got {visual_embeddings.ndim}"
+            )
 
-        # attention mask (B, 1)
-        attention_mask = torch.ones((B, 1), dtype=torch.long, device=device)
+        B = inputs_embeds.size(0)
+        prefix_len = inputs_embeds.size(1)
+
+        # attention mask (B, prefix_len)
+        attention_mask = torch.ones((B, prefix_len), dtype=torch.long, device=device)
 
         output_ids = self.model.generate(
             inputs_embeds=inputs_embeds,

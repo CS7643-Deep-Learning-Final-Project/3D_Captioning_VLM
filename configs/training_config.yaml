@@ -20,6 +20,7 @@ model:
   decoder_name: "gpt2"
   freeze_encoder: true
   freeze_decoder: true
+  prefix_tokens: 10
 
 training:
   learning_rate: 1.0e-5
