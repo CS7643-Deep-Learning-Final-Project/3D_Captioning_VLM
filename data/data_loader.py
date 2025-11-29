@@ -8,6 +8,7 @@ import pickle
 import hashlib
 import zipfile, io, os
 import time
+import re
 from pathlib import Path
 
 class Cap3DDataset(Dataset):
@@ -19,7 +20,7 @@ class Cap3DDataset(Dataset):
     def __init__(
         self,
         hf_repo: str = "tiange/Cap3D",
-        hf_file: str = "Cap3D_automated_ShapeNet.csv",
+        hf_file: str = "Cap3D_automated_ABO.csv",
         split: str = "train",
         point_cloud_size: int = 2048,
         tokenizer: Optional[Any] = None,
@@ -64,7 +65,7 @@ class Cap3DDataset(Dataset):
             t0 = time.perf_counter() if self.profile_io else None
             self.zip_cache[zip_name] = hf_hub_download(
                 repo_id=self.hf_repo,
-                filename=f"PointCloud_zips_ShapeNet/{zip_name}",
+                filename=f"PointCloud_zips_ABO/{zip_name}",
                 repo_type="dataset"
             )
             if self.profile_io:
@@ -100,10 +101,14 @@ class Cap3DDataset(Dataset):
         all_samples = []
         for _, r in df.iterrows():
             uid = r["uid"]
+            caption = (r["caption"] or "").strip()
+            if caption:
+                pieces = re.split(r"(?<=[.!?])\s+", caption, maxsplit=1)
+                caption = pieces[0].strip()
             member = f"{uid}.ply"  # file name inside the zip
             all_samples.append({
                 "uid": uid,
-                "caption": r["caption"],
+                "caption": caption,
                 "zip": zip_name,
                 "member": member,
                 "_bucket": self._uid_bucket(uid),
@@ -185,7 +190,7 @@ class Cap3DDataset(Dataset):
                 names = set(zf.namelist())
                 member = sample_meta["member"]
                 if member not in names:
-                    member = f"ShapeNet_pcs/{member}"
+                    member = f"ABO_pcs/{member}"
                     if member not in names:
                         raise FileNotFoundError(f"{sample_meta['member']} not found in {zip_path}")
 
@@ -349,7 +354,7 @@ class DataModule:
         d = self.data_cfg
         shared = dict(
             hf_repo=d.get("hf_repo", "tiange/Cap3D"),
-            hf_file=d.get("hf_file", "Cap3D_automated_ShapeNet.csv"),
+            hf_file=d.get("hf_file", "Cap3D_automated_ABO.csv"),
             point_cloud_size=d.get("point_cloud_size", 2048),
             tokenizer=self.tokenizer,
             profile_io=bool(d.get("profile_io", False)),
