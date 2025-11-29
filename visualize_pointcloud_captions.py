@@ -5,6 +5,7 @@ plots their point clouds, and overlays both the generated and reference captions
 """
 
 import argparse
+import html
 import random
 import textwrap
 from pathlib import Path
@@ -91,6 +92,11 @@ def format_caption(text: str, width: int = 48) -> str:
     return wrapped if wrapped else "<empty>"
 
 
+def format_caption_html(text: str, width: int = 48) -> str:
+    formatted = format_caption(text, width)
+    return "<br>".join(html.escape(line) for line in formatted.splitlines())
+
+
 def save_interactive_html(path: Path, plots: List[dict]) -> None:
     try:
         from plotly.subplots import make_subplots
@@ -107,7 +113,6 @@ def save_interactive_html(path: Path, plots: List[dict]) -> None:
         rows=1,
         cols=len(plots),
         specs=[[{"type": "scene"} for _ in plots]],
-        subplot_titles=[plot["title_html"] for plot in plots],
     )
 
     for idx, plot in enumerate(plots, start=1):
@@ -141,7 +146,23 @@ def save_interactive_html(path: Path, plots: List[dict]) -> None:
             aspectmode="data",
         )
 
-    fig.update_layout(margin=dict(l=0, r=0, t=60, b=0), showlegend=False)
+        fig.add_annotation(
+            text=plot["title_html"],
+            x=(2 * idx - 1) / (2 * len(plots)),
+            y=-0.16,
+            xref="paper",
+            yref="paper",
+            showarrow=False,
+            align="left",
+            font=dict(size=10),
+        )
+
+    fig.update_layout(
+        margin=dict(l=0, r=0, t=24, b=140),
+        showlegend=False,
+        height=360,
+        width=320 * len(plots),
+    )
 
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.write_html(path, include_plotlyjs="cdn")
@@ -184,7 +205,7 @@ def visualize(args: argparse.Namespace) -> None:
         1,
         len(indices),
         subplot_kw={"projection": "3d"},
-        figsize=(6 * len(indices), 6),
+        figsize=(3.0 * len(indices), 3.0),
         constrained_layout=True,
     )
     if len(indices) == 1:
@@ -241,22 +262,28 @@ def visualize(args: argparse.Namespace) -> None:
                 {
                     "coords": coords,
                     "colors": colors,
-                    "title_html": "<br>".join(title.splitlines()),
+                    "title_html": (
+                        f"Sample #{idx}<br>"
+                        f"<b>Generated:</b><br>{format_caption_html(generated)}<br><br>"
+                        f"<b>Reference:</b><br>{format_caption_html(reference)}"
+                    ),
                 }
             )
 
     output_path = Path(args.output).expanduser() if args.output else None
-    interactive_path = Path(args.interactive_output).expanduser() if args.interactive_output else None
+    if output_path:
+        interactive_path = output_path.with_suffix(".html")
+    else:
+        interactive_path = Path.cwd() / "interactive_visualization.html"
 
-    should_show = not output_path and not interactive_path
+    should_show = output_path is None
 
     if output_path:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(output_path, dpi=200)
         print(f"Visualization saved to {output_path}")
-    if interactive_path:
-        save_interactive_html(interactive_path, plot_records)
-        print(f"Interactive visualization saved to {interactive_path}")
+    save_interactive_html(interactive_path, plot_records)
+    print(f"Interactive visualization saved to {interactive_path}")
     if should_show:
         plt.show()
     else:
@@ -279,11 +306,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", default="auto", help="Computation device: auto|cpu|cuda[:idx]|mps")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for selecting samples")
     parser.add_argument("--output", default=None, help="Optional path to save figure instead of showing it")
-    parser.add_argument(
-        "--interactive-output",
-        default=None,
-        help="Optional path to save an interactive HTML visualization",
-    )
     return parser.parse_args()
 
 
