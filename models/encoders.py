@@ -46,7 +46,7 @@ class BaseEncoder(ABC, nn.Module):
 class DGCNNEncoder(BaseEncoder):
     """
     DGCNN-based encoder using Dynamic Graph CNN for point cloud feature extraction.
-    Can optionally load pretrained weights from ShapeNet for better initialization.
+    Can optionally load pretrained weights from ABO for better initialization.
     """
 
     def __init__(self, output_dim: int = 2048, k: int = 20, pretrained: bool = True, dropout: float = 0.0):
@@ -131,7 +131,7 @@ class DGCNNEncoder(BaseEncoder):
 
     def load_pretrained_weights(self):
         """
-        Load weights pretrained on ShapeNet or other 3D classification datasets.
+    Load weights pretrained on ABO or other 3D classification datasets.
         Useful for faster convergence and better generalization.
         """
         try:

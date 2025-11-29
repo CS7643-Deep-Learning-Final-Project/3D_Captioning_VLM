@@ -1,6 +1,6 @@
 data:
   hf_repo: "tiange/Cap3D"
-  hf_file: "Cap3D_automated_ShapeNet.csv"
+  hf_file: "Cap3D_automated_ABO.csv"
   split_train: "train"     # or custom slice/filter logic
   split_val: "val"
   streaming: true

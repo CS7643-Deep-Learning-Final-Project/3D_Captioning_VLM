@@ -53,7 +53,7 @@ def build_dataset(
         cfg["point_cloud_size"] = point_cloud_size
     return Cap3DDataset(
         hf_repo=cfg.get("hf_repo", "tiange/Cap3D"),
-        hf_file=cfg.get("hf_file", "Cap3D_automated_ShapeNet.csv"),
+    hf_file=cfg.get("hf_file", "Cap3D_automated_ABO.csv"),
         split=split,
         point_cloud_size=cfg.get("point_cloud_size", 2048),
         tokenizer=None,

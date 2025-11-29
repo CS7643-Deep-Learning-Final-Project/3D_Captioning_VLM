@@ -11,7 +11,7 @@ def smoke_single_item():
     print("=== Single item load ===")
     ds = Cap3DDataset(
         hf_repo="tiange/Cap3D",
-        hf_file="Cap3D_automated_ShapeNet.csv",
+    hf_file="Cap3D_automated_ABO.csv",
         split="train",
         point_cloud_size=512,  # smaller for quick test
     )
@@ -34,7 +34,7 @@ def smoke_dataloader():
     cfg = {
         "data": {
             "hf_repo": "tiange/Cap3D",
-            "hf_file": "Cap3D_automated_ShapeNet.csv",
+            "hf_file": "Cap3D_automated_ABO.csv",
             "split_train": "train",
             "split_val": "val",
             "point_cloud_size": 512,
