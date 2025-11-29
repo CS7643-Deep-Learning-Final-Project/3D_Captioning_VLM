@@ -71,6 +71,14 @@ class Trainer:
         self.use_amp = bool(train_cfg.get("amp", True) and torch.cuda.is_available())
         self.log_timing = bool(train_cfg.get("log_timing", False))
         self._sync_cuda_timing = self.log_timing and hasattr(self.device, "type") and self.device.type == "cuda"
+        # establish metric priority order for best-trial reporting (cider first, then bertscore)
+        priority_seed = ["cider", "bertscore", self.main_metric]
+        seen = set()
+        self.metric_priority: List[str] = []
+        for metric in priority_seed:
+            if metric and metric not in seen:
+                self.metric_priority.append(metric)
+                seen.add(metric)
     
         # initialize components
         self.optimizer = self._build_optimizer(self.optimizer_name, self.lr, self.weight_decay)
@@ -335,6 +343,7 @@ class Trainer:
         os.makedirs(save_dir, exist_ok=True)
         best_main = -float("inf")
         main_key = self.main_metric
+        best_summary: Optional[Dict[str, Any]] = None
 
         for epoch in range(1, self.epochs + 1):
             train_loss = self.train_epoch(epoch)
@@ -363,7 +372,61 @@ class Trainer:
                 best_main = main_value
                 print(f"New best {main_key}: {best_main:.2f} (epoch {epoch})")
 
+            # track best trial using priority metrics
+            compare_key = None
+            for metric_name in self.metric_priority:
+                if metric_name in val_scores:
+                    compare_key = metric_name
+                    break
+            if compare_key is None and val_scores:
+                compare_key = next(iter(val_scores))
+
+            if compare_key is not None:
+                candidate_value = val_scores[compare_key]
+                if (
+                    best_summary is None
+                    or candidate_value > best_summary["value"]
+                ):
+                    best_summary = {
+                        "epoch": epoch,
+                        "scores": val_scores.copy(),
+                        "key": compare_key,
+                        "value": candidate_value,
+                    }
+
         print("Training complete.")
+        self.best_summary = best_summary
+        if best_summary is not None:
+            print("-----------------------")
+            metrics_str = ", ".join(
+                f"{k}={v:.4f}" for k, v in best_summary["scores"].items()
+            )
+            if not metrics_str:
+                metrics_str = "n/a"
+            data_cfg = self.config.get("data", {})
+            model_cfg = self.config.get("model", {})
+            samples = data_cfg.get("max_samples")
+            samples = samples if samples is not None else "all"
+            prefix_tokens = model_cfg.get("prefix_tokens", 1)
+            encoder = model_cfg.get("encoder_type", "unknown")
+            point_dim = data_cfg.get("point_cloud_size")
+            if point_dim is None:
+                point_dim = model_cfg.get("output_dim", "unknown")
+            print(
+                "best_epoch={epoch} | best_metric={key}:{value:.4f} | metrics=[{metrics}] | "
+                "samples={samples} | prefix_tokens={prefix_tokens} | encoder={encoder} | "
+                "lr={lr:.2e} | pointcloud_dim={point_dim}".format(
+                    epoch=best_summary["epoch"],
+                    key=best_summary["key"],
+                    value=best_summary["value"],
+                    metrics=metrics_str,
+                    samples=samples,
+                    prefix_tokens=prefix_tokens,
+                    encoder=encoder,
+                    lr=self.lr,
+                    point_dim=point_dim,
+                )
+            )
 
 
     def save_checkpoint(self, epoch: int, scores: Dict[str, float], save_dir: str):
