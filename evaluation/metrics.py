@@ -151,7 +151,7 @@ def _compute_bertscore(preds: List[str], refs: List[List[str]], cfg: _Config):
       lang=cfg.bertscore_lang,
       model_type=cfg.bertscore_model,
       device=device,
-      rescale_with_baseline=True,
+      rescale_with_baseline=False,
     )
     best_f = F1 if best_f is None else torch.maximum(best_f, F1)
   return float(best_f.mean().item() * 100.0)
