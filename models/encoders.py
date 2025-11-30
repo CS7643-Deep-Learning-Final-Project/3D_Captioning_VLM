@@ -324,8 +324,9 @@ class PointBERTEncoder(BaseEncoder):
             torch.Tensor: Global feature embedding of shape (B, D),
                           typically using the [CLS] token representation.
         """
-        device = next(self.backbone.parameters()).device
-        cls_feat = self.backbone.forward_eval(point_cloud.to(device))   # (B, cls_dim)
+    device = next(self.backbone.parameters()).device
+    pts_xyz = point_cloud[..., :3].contiguous()
+    cls_feat = self.backbone.forward_eval(pts_xyz.to(device))   # (B, cls_dim)
         if torch.isnan(cls_feat).any():
             print("[PointBERTEncoder] Warning: forward pass produced NaNs")
         else:
