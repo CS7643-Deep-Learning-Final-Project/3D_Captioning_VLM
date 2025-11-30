@@ -7,7 +7,7 @@ Responsible for transforming encoder embeddings into decoder-compatible space.
 
 import torch
 import torch.nn as nn
-
+from peft import LoraConfig, TaskType, get_peft_model
 
 class ProjectionLayer(nn.Module):
     """
@@ -44,6 +44,16 @@ class ProjectionLayer(nn.Module):
             nn.Linear(hidden_dim, output_dim * self.prefix_tokens),
         )
         self.norm = nn.LayerNorm(output_dim)
+        
+        peft_config = LoraConfig(
+            r=16,
+            lora_alpha=32,
+            target_modules=["0", "3"]
+        )
+        print(self.proj)
+        # for param in self.proj.parameters():
+        #     param.requires_grad = False
+        self.proj = get_peft_model(self.proj, peft_config)
 
     def forward(self, x: torch.Tensor):
         """

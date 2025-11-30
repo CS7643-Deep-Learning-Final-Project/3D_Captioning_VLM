@@ -49,8 +49,30 @@ class CaptionModel(nn.Module):
         )
         # - Initialize decoder (e.g., GPT2Decoder)
         self.decoder = GPT2Decoder(model_name=config['decoder_name'])
-        if config.get("freeze_decoder", False) and hasattr(self.decoder, "freeze_backbone"):
-            self.decoder.freeze_backbone()
+        # if config.get("freeze_decoder", False) and hasattr(self.decoder, "freeze_backbone"):
+        #     self.decoder.freeze_backbone()
+        
+        # Print parameter statistics
+        # """Print statistics about learnable parameters and LoRA parameters."""
+        # total_params = 0
+        # trainable_params = 0
+        # lora_params = 0
+        
+        # for name, param in self.decoder.named_parameters():
+        #     total_params += param.numel()
+        #     if param.requires_grad:
+        #         trainable_params += param.numel()
+        #         if 'lora' in name.lower():
+        #             lora_params += param.numel()
+        
+        # print("\n" + "="*60)
+        # print("Model Parameter Statistics")
+        # print("="*60)
+        # print(f"Total parameters:      {total_params:,}")
+        # print(f"Trainable parameters:  {trainable_params:,} ({100 * trainable_params / total_params:.2f}%)")
+        # print(f"LoRA parameters:       {lora_params:,} ({100 * lora_params / trainable_params:.2f}% of trainable)")
+        # print(f"Non-LoRA trainable:    {trainable_params - lora_params:,}")
+        # print("="*60 + "\n")
 
     def forward(self, point_clouds: torch.Tensor, caption: Optional[List[str]] = None):
         """
