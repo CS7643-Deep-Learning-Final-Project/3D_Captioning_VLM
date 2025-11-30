@@ -45,4 +45,4 @@ training:
 evaluation:
   metrics: ["bleu", "cider", "rouge-l", "bertscore"]
   main_metric: "cider"
-  eval_frequency: 1
+  eval_frequency:

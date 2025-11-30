@@ -11,6 +11,7 @@ import torch.nn as nn
 from abc import ABC, abstractmethod
 from typing import Any
 import torch.nn.functional as F
+import importlib.util
 
 class BaseEncoder(ABC, nn.Module):
     """
@@ -206,9 +207,19 @@ for path in (_REPO_ROOT, POINTBERT_ROOT):
     if os.path.isdir(resolved) and resolved not in sys.path:
         sys.path.insert(0, resolved)
 
-from Point_BERT.utils.config import cfg_from_yaml_file
-from Point_BERT.models.build import build_model_from_cfg
-from Point_BERT.models.Point_BERT import Point_BERT as _PointBERT
+if "Point_BERT" not in sys.modules:
+    init_file = os.path.join(POINTBERT_ROOT, "__init__.py")
+    spec = importlib.util.spec_from_file_location("Point_BERT", init_file, submodule_search_locations=[POINTBERT_ROOT])
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["Point_BERT"] = module
+    if spec.loader is not None:
+        spec.loader.exec_module(module)
+
+from importlib import import_module
+
+cfg_from_yaml_file = import_module("Point_BERT.utils.config").cfg_from_yaml_file
+build_model_from_cfg = import_module("Point_BERT.models.build").build_model_from_cfg
+_PointBERT = import_module("Point_BERT.models.Point_BERT").Point_BERT
 
 class PointBERTEncoder(BaseEncoder):
     """
