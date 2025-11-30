@@ -15,23 +15,26 @@ def log_config_to_file(cfg, pre='cfg', logger=None):
             continue
         print_log(f'{pre}.{key} : {val}', logger = logger)
 
-def merge_new_config(config, new_config):
+def merge_new_config(config, new_config, root_path):
     for key, val in new_config.items():
         if not isinstance(val, dict):
             if key == '_base_':
-                with open(new_config['_base_'], 'r') as f:
+                base_path = val
+                if not os.path.isabs(base_path):
+                    base_path = os.path.join(root_path, base_path)
+                with open(base_path, 'r') as f:
                     try:
                         val = yaml.load(f, Loader=yaml.FullLoader)
                     except:
                         val = yaml.load(f)
                 config[key] = EasyDict()
-                merge_new_config(config[key], val)
+                merge_new_config(config[key], val, os.path.dirname(base_path))
             else:
                 config[key] = val
                 continue
         if key not in config:
             config[key] = EasyDict()
-        merge_new_config(config[key], val)
+        merge_new_config(config[key], val, root_path)
     return config
 
 def cfg_from_yaml_file(cfg_file):
@@ -41,7 +44,7 @@ def cfg_from_yaml_file(cfg_file):
             new_config = yaml.load(f, Loader=yaml.FullLoader)
         except:
             new_config = yaml.load(f)
-    merge_new_config(config=config, new_config=new_config)        
+    merge_new_config(config=config, new_config=new_config, root_path=os.path.dirname(cfg_file))        
     return config
 
 def get_config(args, logger=None):
