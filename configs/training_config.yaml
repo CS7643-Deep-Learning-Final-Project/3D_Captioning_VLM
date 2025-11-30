@@ -20,11 +20,11 @@ model:
   decoder_name: "gpt2"
   freeze_encoder: true
   freeze_decoder: true
-  prefix_tokens: 10
+  prefix_tokens: 16
 
 training:
   learning_rate: 1.0e-3
-  num_epochs: 10
+  num_epochs: 16
   warmup_fraction: 0.05
   max_length: 30
   optimizer: "adamw"
