@@ -20,8 +20,10 @@ model:
   decoder_name: "gpt2"
   freeze_encoder: true
   freeze_decoder: true
-  lora: true
+  use_decoder_lora: true
   prefix_tokens: 16
+  decoder_lora_r: 16
+  decoder_lora_alpha: 32
 
 training:
   learning_rate: 1.0e-3

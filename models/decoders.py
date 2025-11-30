@@ -18,27 +18,50 @@ class GPT2Decoder(nn.Module):
     Supports both training with teacher forcing and inference with beam search.
     """
 
-    def __init__(self, model_name: str = "gpt2", max_length: int = 60):
+    def __init__(
+        self,
+        model_name: str = "gpt2",
+        max_length: int = 30,
+        lora_r: int = 16,
+        lora_alpha: int = 32,
+        use_lora: bool = True,
+    ):
         """
         Initialize GPT-2 model and tokenizer with specified parameters.
 
         Args:
             model_name (str): Name of the pretrained GPT-2 model (e.g., 'gpt2', 'gpt2-medium').
             max_length (int): Maximum caption length during training or generation.
+            lora_r (int): LoRA rank (when enabled).
+            lora_alpha (int): LoRA scaling factor (when enabled).
+            use_lora (bool): Whether to apply LoRA adapters.
         """
         super().__init__()
-        
+
         # 1. load model and tokenizer
         self.tokenizer = GPT2Tokenizer.from_pretrained(model_name)
         self.model = GPT2LMHeadModel.from_pretrained(model_name)
-        self.max_length = max_length 
+        self.max_length = max_length
 
         # 2. set pad_token
         self.tokenizer.pad_token = self.tokenizer.eos_token
         self.model.config.pad_token_id = self.tokenizer.eos_token_id
-        
+
         # 3. set embed_dim
         self.embed_dim = self.model.config.n_embd
+
+        self.use_lora = bool(use_lora)
+        self.peft_config: Optional[LoraConfig] = None
+        if self.use_lora:
+            self.peft_config = LoraConfig(
+                r=lora_r,
+                lora_alpha=lora_alpha,
+                task_type=TaskType.CAUSAL_LM,
+                target_modules=["c_attn"],
+            )
+            for param in self.model.parameters():
+                param.requires_grad = False
+            self.model = get_peft_model(self.model, self.peft_config)
 
     def forward(self, visual_embeddings: torch.Tensor, captions: Optional[List[str]] = None):
         """
@@ -130,7 +153,7 @@ class GPT2Decoder(nn.Module):
     def generate(
         self,
         visual_embeddings: torch.Tensor,
-        max_length: int = 60,
+        max_length: int = 30,
         num_beams: int = 3,
         no_repeat_ngram_size: int = 3,
         repetition_penalty: float = 1.1,
@@ -199,13 +222,5 @@ class GPT2Decoder(nn.Module):
         for param in self.model.parameters():
             param.requires_grad = False
     
-    def convert_to_lora(self):
-        peft_config = LoraConfig(
-            r=16,
-            lora_alpha=32,
-            task_type=TaskType.CAUSAL_LM,
-            target_modules=["c_attn"]
-        )
-        self.model = get_peft_model(self.model, peft_config)
 
 __all__ = ["GPT2Decoder"]

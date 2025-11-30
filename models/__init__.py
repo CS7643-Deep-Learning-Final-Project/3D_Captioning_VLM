@@ -48,11 +48,31 @@ class CaptionModel(nn.Module):
             prefix_tokens=self.prefix_tokens,
         )
         # - Initialize decoder (e.g., GPT2Decoder)
-        self.decoder = GPT2Decoder(model_name=config['decoder_name'])
-        if config.get("freeze_decoder", False) and hasattr(self.decoder, "freeze_backbone"):
+        decoder_lora_r = int(config.get("decoder_lora_r", 16))
+        decoder_lora_alpha = int(config.get("decoder_lora_alpha", 32))
+        decoder_max_length = int(config.get("max_length", 30))
+        use_decoder_lora = bool(config.get("use_decoder_lora", False))
+
+        freeze_cfg = config.get("freeze_decoder", None)
+        if use_decoder_lora and (freeze_cfg is False):
+            raise ValueError(
+                "Configuration conflict: use_decoder_lora=True requires freeze_decoder to be omitted or True."
+            )
+        if freeze_cfg is None:
+            freeze_decoder = not use_decoder_lora
+        else:
+            freeze_decoder = bool(freeze_cfg)
+
+        self.decoder = GPT2Decoder(
+            model_name=config['decoder_name'],
+            max_length=decoder_max_length,
+            lora_r=decoder_lora_r,
+            lora_alpha=decoder_lora_alpha,
+            use_lora=use_decoder_lora,
+        )
+
+        if not use_decoder_lora and freeze_decoder and hasattr(self.decoder, "freeze_backbone"):
             self.decoder.freeze_backbone()
-        if config.get("lora", False):
-            self.decoder.convert_to_lora()
         
         # Print parameter statistics
         # """Print statistics about learnable parameters and LoRA parameters."""
