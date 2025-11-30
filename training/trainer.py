@@ -54,14 +54,7 @@ class Trainer:
         self.lr = train_cfg.get("learning_rate", 1e-4)
         self.epochs = train_cfg.get("num_epochs", 10)
         self.gen_max_length = train_cfg.get("max_length", 128)
-        raw_eval_every = eval_cfg.get("eval_frequency", 1)
-        if raw_eval_every in (None, False):
-            self.eval_every = None  # disable periodic eval
-        else:
-            try:
-                self.eval_every = max(1, int(raw_eval_every))
-            except (TypeError, ValueError):
-                self.eval_every = 1
+        self.eval_every = 1  # evaluate once per epoch by default
         self.metrics = eval_cfg.get("metrics", ["cider"])
 
         # fixed or optional params (could also move to YAML later)
@@ -360,8 +353,6 @@ class Trainer:
             train_loss = self.train_epoch(epoch)
             print(f"Epoch {epoch} finished. avg_train_loss={train_loss:.4f}")
 
-            if self.eval_every is None:
-                continue
             do_eval = (epoch % self.eval_every == 0)
             if not do_eval:
                 continue
