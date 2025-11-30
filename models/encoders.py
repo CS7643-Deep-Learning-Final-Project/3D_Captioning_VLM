@@ -197,16 +197,14 @@ POINTBERT_ROOT = os.path.join(_REPO_ROOT, "Point-BERT")
 POINTBERT_CFG = os.path.join(POINTBERT_ROOT, "cfgs", "Mixup_models", "Point-BERT.yaml")
 POINTBERT_DVAE_CKPT = os.path.join(POINTBERT_ROOT, "dVAE.pth")
 POINTBERT_BERT_CKPT = os.path.join(POINTBERT_ROOT, "Point-BERT.pth")
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 if POINTBERT_ROOT not in sys.path:
     sys.path.insert(0, POINTBERT_ROOT)
-pb_models_dir = os.path.join(POINTBERT_ROOT, "models")
-pb_utils_dir = os.path.join(POINTBERT_ROOT, "utils")
-for p in (pb_models_dir, pb_utils_dir):
-    if p not in sys.path:
-        sys.path.insert(0, p)
-from utils.config import cfg_from_yaml_file
-from build import build_model_from_cfg
-from Point_BERT import Point_BERT as _PointBERT
+
+from Point_BERT.utils.config import cfg_from_yaml_file
+from Point_BERT.models.build import build_model_from_cfg
+from Point_BERT.models.Point_BERT import Point_BERT as _PointBERT
 
 class PointBERTEncoder(BaseEncoder):
     """
