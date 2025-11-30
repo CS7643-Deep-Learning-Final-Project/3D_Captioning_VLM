@@ -76,15 +76,21 @@ class GPT2Decoder(nn.Module):
 
             # Encode each caption without special tokens, append EOS, then pad.
             token_seqs = []
+            seq_lens = []
             for text in captions:
                 ids = self.tokenizer.encode(text, add_special_tokens=False)
                 if len(ids) > max_body_len:
                     ids = ids[:max_body_len]
                 ids.append(eos_id)
+                seq_lens.append(len(ids))
                 token_seqs.append(torch.tensor(ids, dtype=torch.long))
 
             input_ids = pad_sequence(token_seqs, batch_first=True, padding_value=pad_id).to(device)
-            attention_mask = (input_ids != pad_id).long()
+            seq_lens_tensor = torch.tensor(seq_lens, device=device)
+            max_len = input_ids.size(1)
+            attention_mask = (
+                torch.arange(max_len, device=device).unsqueeze(0) < seq_lens_tensor.unsqueeze(1)
+            ).long()
 
             # (B, seq_len) -> (B, seq_len, D)
             caption_embeds = self.model.transformer.wte(input_ids)
