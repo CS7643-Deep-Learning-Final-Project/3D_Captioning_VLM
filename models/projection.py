@@ -45,15 +45,13 @@ class ProjectionLayer(nn.Module):
         )
         self.norm = nn.LayerNorm(output_dim)
         
-        peft_config = LoraConfig(
-            r=16,
-            lora_alpha=32,
-            target_modules=["0", "3"]
-        )
-        print(self.proj)
-        # for param in self.proj.parameters():
-        #     param.requires_grad = False
-        self.proj = get_peft_model(self.proj, peft_config)
+        # Uncomment for LoRa on Projection Layer
+        # peft_config = LoraConfig(
+        #     r=16,
+        #     lora_alpha=32,
+        #     target_modules=["0", "3"]
+        # )
+        # self.proj = get_peft_model(self.proj, peft_config)
 
     def forward(self, x: torch.Tensor):
         """

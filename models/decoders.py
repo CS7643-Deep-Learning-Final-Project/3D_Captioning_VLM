@@ -39,16 +39,6 @@ class GPT2Decoder(nn.Module):
         
         # 3. set embed_dim
         self.embed_dim = self.model.config.n_embd
-        
-        self.peft_config = LoraConfig(
-            r=16,
-            lora_alpha=32,
-            task_type=TaskType.CAUSAL_LM,
-            target_modules=["c_attn"]
-        )
-        for param in self.model.parameters():
-            param.requires_grad = False
-        self.model = get_peft_model(self.model, self.peft_config)
 
     def forward(self, visual_embeddings: torch.Tensor, captions: Optional[List[str]] = None):
         """
@@ -208,5 +198,14 @@ class GPT2Decoder(nn.Module):
         """
         for param in self.model.parameters():
             param.requires_grad = False
+    
+    def convert_to_lora(self):
+        peft_config = LoraConfig(
+            r=16,
+            lora_alpha=32,
+            task_type=TaskType.CAUSAL_LM,
+            target_modules=["c_attn"]
+        )
+        self.model = get_peft_model(self.model, peft_config)
 
 __all__ = ["GPT2Decoder"]

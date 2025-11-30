@@ -49,8 +49,10 @@ class CaptionModel(nn.Module):
         )
         # - Initialize decoder (e.g., GPT2Decoder)
         self.decoder = GPT2Decoder(model_name=config['decoder_name'])
-        # if config.get("freeze_decoder", False) and hasattr(self.decoder, "freeze_backbone"):
-        #     self.decoder.freeze_backbone()
+        if config.get("freeze_decoder", False) and hasattr(self.decoder, "freeze_backbone"):
+            self.decoder.freeze_backbone()
+        if config.get("lora", False):
+            self.decoder.convert_to_lora()
         
         # Print parameter statistics
         # """Print statistics about learnable parameters and LoRA parameters."""
