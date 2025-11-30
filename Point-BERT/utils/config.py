@@ -15,13 +15,26 @@ def log_config_to_file(cfg, pre='cfg', logger=None):
             continue
         print_log(f'{pre}.{key} : {val}', logger = logger)
 
+def _resolve_base_path(path, root_path):
+    if os.path.isabs(path):
+        return path
+    current = root_path
+    while True:
+        candidate = os.path.abspath(os.path.join(current, path))
+        if os.path.exists(candidate):
+            return candidate
+        parent = os.path.dirname(current)
+        if parent == current:
+            break
+        current = parent
+    return os.path.abspath(os.path.join(root_path, path))
+
+
 def merge_new_config(config, new_config, root_path):
     for key, val in new_config.items():
         if not isinstance(val, dict):
             if key == '_base_':
-                base_path = val
-                if not os.path.isabs(base_path):
-                    base_path = os.path.join(root_path, base_path)
+                base_path = _resolve_base_path(val, root_path)
                 with open(base_path, 'r') as f:
                     try:
                         val = yaml.load(f, Loader=yaml.FullLoader)
