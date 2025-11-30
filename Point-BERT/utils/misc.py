@@ -7,7 +7,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 import os
 from collections import abc
-from pointnet2_ops import pointnet2_utils
+
+try:
+    from pointnet2_ops import pointnet2_utils  # optional CUDA acceleration
+except ImportError:
+    pointnet2_utils = None
 
 
 def fps(data, number):
@@ -15,9 +19,39 @@ def fps(data, number):
         data B N 3
         number int
     '''
-    fps_idx = pointnet2_utils.furthest_point_sample(data, number) 
-    fps_data = pointnet2_utils.gather_operation(data.transpose(1, 2).contiguous(), fps_idx).transpose(1,2).contiguous()
-    return fps_data
+    if pointnet2_utils is not None:
+        fps_idx = pointnet2_utils.furthest_point_sample(data, number)
+        fps_data = pointnet2_utils.gather_operation(
+            data.transpose(1, 2).contiguous(), fps_idx
+        ).transpose(1, 2).contiguous()
+        return fps_data
+
+    fps_idx = _furthest_point_sample(data, number)
+    gathered = _gather_operation(data.transpose(1, 2).contiguous(), fps_idx)
+    return gathered.transpose(1, 2).contiguous()
+
+
+def _furthest_point_sample(data, number):
+    device = data.device
+    b, n, _ = data.shape
+    centroids = torch.zeros(b, number, dtype=torch.long, device=device)
+    distance = torch.full((b, n), 1e10, device=device)
+    farthest = torch.randint(0, n, (b,), dtype=torch.long, device=device)
+    batch_indices = torch.arange(b, device=device)
+    for i in range(number):
+        centroids[:, i] = farthest
+        centroid = data[batch_indices, farthest, :].unsqueeze(1)
+        dist = torch.sum((data - centroid) ** 2, dim=-1)
+        mask = dist < distance
+        distance[mask] = dist[mask]
+        farthest = torch.max(distance, dim=1)[1]
+    return centroids
+
+
+def _gather_operation(points, idx):
+    b, c, n = points.shape
+    idx_expanded = idx.unsqueeze(1).expand(-1, c, -1)
+    return torch.gather(points, 2, idx_expanded)
 
 
 def worker_init_fn(worker_id):

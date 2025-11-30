@@ -1,7 +1,6 @@
 import torch.nn as nn
 import torch
 import torch.nn.functional as F
-from pointnet2_ops import pointnet2_utils
 from .build import MODELS
 from utils import misc
 from extensions.chamfer_dist import ChamferDistanceL1, ChamferDistanceL2
