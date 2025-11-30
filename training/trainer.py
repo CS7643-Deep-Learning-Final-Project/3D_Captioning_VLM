@@ -12,6 +12,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 import math
 from typing import Any, Dict, List, Union, Optional
+# from torch.profiler import profile, ProfilerActivity
 
 
 class Trainer:
@@ -196,6 +197,7 @@ class Trainer:
         iter_time_sum = 0.0
 
         # --- train_epoch ---
+        # with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA]) as prof:
         for step, batch in enumerate(self.train_loader, start=1):
             if self.log_timing:
                 iter_start = time.perf_counter()
@@ -264,6 +266,8 @@ class Trainer:
                     )
                 print(msg)
 
+        # print("PRINTING ACG")
+        # print(prof.key_averages().table())
         if self._per_epoch_scheduler: # step only per-epoch schedulers here
             self.scheduler.step()
         return running / max(1, count)
