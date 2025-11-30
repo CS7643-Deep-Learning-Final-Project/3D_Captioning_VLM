@@ -4,7 +4,7 @@ data:
   split_train: "train"     # or custom slice/filter logic
   split_val: "val"
   streaming: true
-  point_cloud_size: 2048
+  point_cloud_size: 4096
   batch_size: 32
   num_workers: 5
   profile_io: true
@@ -24,8 +24,8 @@ model:
   prefix_tokens: 16
 
 training:
-  learning_rate: 1.0e-3
-  num_epochs: 16
+  learning_rate: 5.0e-4
+  num_epochs: 20
   warmup_fraction: 0.05
   max_length: 30
   optimizer: "adamw"
@@ -39,6 +39,7 @@ training:
   pad_token_id: -100
   log_timing: true
   log_every: 10
+  checkpoint: "epoch015.pt"
 
 evaluation:
   metrics: ["bleu", "cider", "rouge-l", "bertscore"]
