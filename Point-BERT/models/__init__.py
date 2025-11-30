@@ -1,3 +1,3 @@
 from .build import build_model_from_cfg
-import models.dvae
-import models.Point_BERT
+from . import dvae  # ensure relative import within Point-BERT package
+from . import Point_BERT  # ensure relative import within Point-BERT package
