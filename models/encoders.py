@@ -192,15 +192,18 @@ class DGCNNEncoder(BaseEncoder):
         """Return the output embedding dimension."""
         return self.output_dim
 
-_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+try:
+    _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+except NameError:
+    _REPO_ROOT = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
 POINTBERT_ROOT = os.path.join(_REPO_ROOT, "Point-BERT")
 POINTBERT_CFG = os.path.join(POINTBERT_ROOT, "cfgs", "Mixup_models", "Point-BERT.yaml")
 POINTBERT_DVAE_CKPT = os.path.join(POINTBERT_ROOT, "dVAE.pth")
 POINTBERT_BERT_CKPT = os.path.join(POINTBERT_ROOT, "Point-BERT.pth")
-if _REPO_ROOT not in sys.path:
-    sys.path.insert(0, _REPO_ROOT)
-if POINTBERT_ROOT not in sys.path:
-    sys.path.insert(0, POINTBERT_ROOT)
+for path in (_REPO_ROOT, POINTBERT_ROOT):
+    resolved = os.path.abspath(path)
+    if os.path.isdir(resolved) and resolved not in sys.path:
+        sys.path.insert(0, resolved)
 
 from Point_BERT.utils.config import cfg_from_yaml_file
 from Point_BERT.models.build import build_model_from_cfg
