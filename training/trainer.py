@@ -53,6 +53,7 @@ class Trainer:
         # core training hyperparameters
         self.lr = train_cfg.get("learning_rate", 1e-4)
         self.epochs = train_cfg.get("num_epochs", 10)
+        self.starting_epoch = 1
         self.gen_max_length = train_cfg.get("max_length", 128)
         self.eval_every = eval_cfg.get("eval_frequency", 1)
         self.metrics = eval_cfg.get("metrics", ["cider"])
@@ -103,6 +104,10 @@ class Trainer:
         self.best_scores: List[float] = [] # track top-k checkpoints
         self.saved_ckpts: List[str] = [] # track top-k checkpoints
         self.config = config  # keep YAML for checkpoint metadata
+        
+        print("Checking checkpoint:", train_cfg.get("checkpoint"))
+        if train_cfg.get("checkpoint", None) is not None:
+            self.load_checkpoint(train_cfg.get("checkpoint"))
 
 
     def _build_optimizer(self, name: str, lr: float, weight_decay: float):
@@ -349,7 +354,7 @@ class Trainer:
         main_key = self.main_metric
         best_summary: Optional[Dict[str, Any]] = None
 
-        for epoch in range(1, self.epochs + 1):
+        for epoch in range(self.starting_epoch, self.epochs + 1):
             train_loss = self.train_epoch(epoch)
             print(f"Epoch {epoch} finished. avg_train_loss={train_loss:.4f}")
 
@@ -459,6 +464,30 @@ class Trainer:
         torch.save(ckpt, path)
         print(f"Saved checkpoint: {path}")
         return path
+    
+    def load_checkpoint(self, checkpoint_path: str):
+        """
+        Save model checkpoint with training metadata and evaluation scores.
+        Args:
+            epoch (int): Current training epoch.
+            scores (Dict[str, float]): Validation metrics for this checkpoint.
+            save_dir (str): Directory path to save model and metadata.
+        """
+        # Responsibilities:
+        # - Create save directory if not exists
+        # - Serialize model state_dict, optimizer state, and current scores
+        # - Optionally keep only best checkpoints
+        print("Loading checkpoint...")
+        checkpoint = torch.load(checkpoint_path, weights_only=True)
+        self.model.load_state_dict(checkpoint['model_state'])
+        self.optimizer.load_state_dict(checkpoint['optimizer_state'])
+        if self.scheduler is not None: self.scheduler.load_state_dict(checkpoint['scheduler_state'])
+        if self.scaler is not None: self.scaler.load_state_dict(checkpoint['scaler_state'])
+        self.starting_epoch = checkpoint['epoch']
+        loss = checkpoint['loss']
+        print(checkpoint['scores'])
+
+        self.model.train()
     
     
     def _maybe_register_topk(self, path: str, score: float):
