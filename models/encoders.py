@@ -193,9 +193,10 @@ class DGCNNEncoder(BaseEncoder):
         return self.output_dim
 
 try:
-    _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    this_file = os.path.abspath(__file__)
 except NameError:
-    _REPO_ROOT = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
+    this_file = os.path.abspath(os.path.join(os.getcwd(), "models", "encoders.py"))
+_REPO_ROOT = os.path.dirname(os.path.dirname(this_file))
 POINTBERT_ROOT = os.path.join(_REPO_ROOT, "Point-BERT")
 POINTBERT_CFG = os.path.join(POINTBERT_ROOT, "cfgs", "Mixup_models", "Point-BERT.yaml")
 POINTBERT_DVAE_CKPT = os.path.join(POINTBERT_ROOT, "dVAE.pth")
