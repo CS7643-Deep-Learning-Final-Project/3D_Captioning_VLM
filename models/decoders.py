@@ -9,6 +9,7 @@ import torch
 import torch.nn as nn
 from typing import Any, List, Optional
 from transformers import GPT2Tokenizer, GPT2LMHeadModel
+from torch.nn.utils.rnn import pad_sequence
 
 class GPT2Decoder(nn.Module):
     """
@@ -69,16 +70,22 @@ class GPT2Decoder(nn.Module):
             B, prefix_len, _ = visual_prefix.shape
             device = visual_embeddings.device
 
-            tok_out = self.tokenizer(
-                captions,
-                return_tensors="pt",
-                padding="max_length",
-                truncation=True,
-                max_length=self.max_length
-            )
-            input_ids = tok_out.input_ids.to(device)
-            attention_mask = tok_out.attention_mask.to(device)
-            
+            eos_id = self.tokenizer.eos_token_id
+            pad_id = self.tokenizer.pad_token_id
+            max_body_len = max(1, self.max_length - 1)
+
+            # Encode each caption without special tokens, append EOS, then pad.
+            token_seqs = []
+            for text in captions:
+                ids = self.tokenizer.encode(text, add_special_tokens=False)
+                if len(ids) > max_body_len:
+                    ids = ids[:max_body_len]
+                ids.append(eos_id)
+                token_seqs.append(torch.tensor(ids, dtype=torch.long))
+
+            input_ids = pad_sequence(token_seqs, batch_first=True, padding_value=pad_id).to(device)
+            attention_mask = (input_ids != pad_id).long()
+
             # (B, seq_len) -> (B, seq_len, D)
             caption_embeds = self.model.transformer.wte(input_ids)
 
@@ -165,6 +172,7 @@ class GPT2Decoder(nn.Module):
             repetition_penalty=repetition_penalty,
             pad_token_id=self.tokenizer.pad_token_id,
             eos_token_id=self.tokenizer.eos_token_id,
+            early_stopping=True,
         )
 
         # convert token IDs to text and drop <|endoftext|>
