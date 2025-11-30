@@ -416,10 +416,22 @@ class Trainer:
             point_dim = data_cfg.get("point_cloud_size")
             if point_dim is None:
                 point_dim = model_cfg.get("output_dim", "unknown")
+            decoder_lora_used = bool(model_cfg.get("use_decoder_lora", False))
+            decoder_lora_r = model_cfg.get("decoder_lora_r", "n/a")
+            decoder_lora_alpha = model_cfg.get("decoder_lora_alpha", "n/a")
+
+            if decoder_lora_used:
+                lora_suffix = " | lora_r={r} | lora_alpha={alpha}".format(
+                    r=decoder_lora_r,
+                    alpha=decoder_lora_alpha,
+                )
+            else:
+                lora_suffix = ""
+
             print(
-                "best_epoch={epoch} | best_metric={key}:{value:.2f} | metrics=[{metrics}] | "
+                "best_epoch={epoch} | metrics=[{metrics}] | "
                 "samples={samples} | prefix_tokens={prefix_tokens} | encoder={encoder} | "
-                "lr={lr:.2e} | pointcloud_dim={point_dim}".format(
+                "lr={lr:.2e} | pointcloud_dim={point_dim} | decoder_lora={lora_flag}{lora_suffix}".format(
                     epoch=best_summary["epoch"],
                     key=best_summary["key"],
                     value=best_summary["value"],
@@ -429,6 +441,8 @@ class Trainer:
                     encoder=encoder,
                     lr=self.lr,
                     point_dim=point_dim,
+                    lora_flag="yes" if decoder_lora_used else "no",
+                    lora_suffix=lora_suffix,
                 )
             )
 
