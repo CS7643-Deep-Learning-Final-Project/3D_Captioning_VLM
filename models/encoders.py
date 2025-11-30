@@ -257,13 +257,14 @@ class PointBERTEncoder(BaseEncoder):
                 raise FileNotFoundError(f"Point-BERT checkpoint not found: {pointbert_ckpt}")
             # Use the helper provided by the official Point_BERT implementation
             loader_fn = getattr(self.backbone, "load_model_from_ckpt", None)
-            if loader_fn is None:
-                loader_fn = getattr(_PointBERT, "load_model_from_ckpt", None)
-                if loader_fn is None:
-                    raise AttributeError("Point_BERT backbone missing load_model_from_ckpt helper")
-                loader_fn(self.backbone, pointbert_ckpt)
-            else:
+            if callable(loader_fn):
                 loader_fn(pointbert_ckpt)
+            else:
+                base_cls = type(self.backbone)
+                loader_fn = getattr(base_cls, "load_model_from_ckpt", None)
+                if loader_fn is None:
+                    loader_fn = getattr(_PointBERT, "load_model_from_ckpt")
+                loader_fn(self.backbone, pointbert_ckpt)
             print(f"[PointBERTEncoder] Loaded pretrained weights from {pointbert_ckpt}")
 
         # ------- 4. Optionally freeze backbone and record output dimensionality -------
