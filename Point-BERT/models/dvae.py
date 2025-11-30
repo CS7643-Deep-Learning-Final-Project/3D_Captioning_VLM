@@ -1,19 +1,21 @@
 import torch.nn as nn
 import torch
 import torch.nn.functional as F
-from knn_cuda import KNN
 from pointnet2_ops import pointnet2_utils
 from .build import MODELS
 from utils import misc
 from extensions.chamfer_dist import ChamferDistanceL1, ChamferDistanceL2
-# from extensions.emd import emd
 from utils.checkpoint import get_missing_parameters_message, get_unexpected_parameters_message
 from utils.logger import *
 
 
-
-from knn_cuda import KNN
-knn = KNN(k=4, transpose_mode=False)
+def _knn_indices(coor_k, coor_q, k):
+    """Pure PyTorch KNN used when CUDA extension is unavailable."""
+    coor_k = coor_k.transpose(1, 2).contiguous()  # B Nk 3
+    coor_q = coor_q.transpose(1, 2).contiguous()  # B Nq 3
+    dist = square_distance(coor_q, coor_k)  # B Nq Nk
+    idx = dist.topk(k, dim=-1, largest=False, sorted=False)[1]  # B Nq k
+    return idx.permute(0, 2, 1).contiguous()  # B k Nq
 
 
 class DGCNN(nn.Module):
@@ -60,7 +62,7 @@ class DGCNN(nn.Module):
         num_points_q = x_q.size(2)
 
         with torch.no_grad():
-            _, idx = knn(coor_k, coor_q)  # bs k np
+            idx = _knn_indices(coor_k, coor_q, k)  # bs k np
             assert idx.shape[1] == k
             idx_base = torch.arange(0, batch_size, device=x_q.device).view(-1, 1, 1) * num_points_k
             idx = idx + idx_base
