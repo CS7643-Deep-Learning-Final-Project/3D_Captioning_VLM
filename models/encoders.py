@@ -12,6 +12,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 import torch.nn.functional as F
 import importlib.util
+from importlib import import_module
 
 class BaseEncoder(ABC, nn.Module):
     """
@@ -219,7 +220,30 @@ from importlib import import_module
 
 cfg_from_yaml_file = import_module("Point_BERT.utils.config").cfg_from_yaml_file
 build_model_from_cfg = import_module("Point_BERT.models.build").build_model_from_cfg
-_PointBERT = import_module("Point_BERT.models.Point_BERT").Point_BERT
+_PointBERT_module = import_module("Point_BERT.models.Point_BERT")
+_PointBERT = _PointBERT_module.Point_BERT
+_checkpoint_utils = import_module("Point_BERT.utils.checkpoint")
+_missing_msg = getattr(_checkpoint_utils, "get_missing_parameters_message", lambda keys: str(keys))
+_unexpected_msg = getattr(_checkpoint_utils, "get_unexpected_parameters_message", lambda keys: str(keys))
+
+
+def _load_pointbert_checkpoint(backbone: nn.Module, ckpt_path: str):
+    """Fallback loader mirroring Point-BERT's original helper."""
+    ckpt = torch.load(ckpt_path, map_location="cpu")
+    base_model = ckpt.get("base_model", ckpt)
+    processed = {}
+    for key, value in base_model.items():
+        key = key.replace("module.", "")
+        processed[key] = value
+        if key.startswith("transformer_q") and not key.startswith("transformer_q.cls_head"):
+            processed[key[len("transformer_q."):]] = value
+        elif key.startswith("base_model"):
+            processed[key[len("base_model."):]] = value
+    incompatible = backbone.load_state_dict(processed, strict=False)
+    if getattr(incompatible, "missing_keys", None):
+        print("[PointBERTEncoder] Missing keys:\n" + _missing_msg(incompatible.missing_keys))
+    if getattr(incompatible, "unexpected_keys", None):
+        print("[PointBERTEncoder] Unexpected keys:\n" + _unexpected_msg(incompatible.unexpected_keys))
 
 class PointBERTEncoder(BaseEncoder):
     """
@@ -257,14 +281,23 @@ class PointBERTEncoder(BaseEncoder):
                 raise FileNotFoundError(f"Point-BERT checkpoint not found: {pointbert_ckpt}")
             # Use the helper provided by the official Point_BERT implementation
             loader_fn = getattr(self.backbone, "load_model_from_ckpt", None)
+            loaded = False
             if callable(loader_fn):
                 loader_fn(pointbert_ckpt)
+                loaded = True
             else:
                 base_cls = type(self.backbone)
                 loader_fn = getattr(base_cls, "load_model_from_ckpt", None)
-                if loader_fn is None:
-                    loader_fn = getattr(_PointBERT, "load_model_from_ckpt")
-                loader_fn(self.backbone, pointbert_ckpt)
+                if callable(loader_fn):
+                    loader_fn(self.backbone, pointbert_ckpt)
+                    loaded = True
+                else:
+                    class_loader = getattr(_PointBERT, "load_model_from_ckpt", None)
+                    if callable(class_loader):
+                        class_loader(self.backbone, pointbert_ckpt)
+                        loaded = True
+            if not loaded:
+                _load_pointbert_checkpoint(self.backbone, pointbert_ckpt)
             print(f"[PointBERTEncoder] Loaded pretrained weights from {pointbert_ckpt}")
 
         # ------- 4. Optionally freeze backbone and record output dimensionality -------
