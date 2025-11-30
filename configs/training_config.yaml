@@ -14,9 +14,9 @@ data:
   populate_cache: true
 
 model:
-  encoder_type: "dgcnn"
+  encoder_type: "pointbert"
   embed_dim: 768
-  output_dim: 2048
+  output_dim: 512
   decoder_name: "gpt2"
   freeze_encoder: true
   freeze_decoder: true

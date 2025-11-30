@@ -4,7 +4,8 @@ encoders.py
 Defines abstract and concrete encoder classes for 3D captioning.
 Supports modular integration of multiple 3D vision backbones (e.g., DGCNN, Point-BERT).
 """
-
+import os
+import sys
 import torch
 import torch.nn as nn
 from abc import ABC, abstractmethod
@@ -191,6 +192,21 @@ class DGCNNEncoder(BaseEncoder):
         """Return the output embedding dimension."""
         return self.output_dim
 
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+POINTBERT_ROOT = os.path.join(_REPO_ROOT, "Point-BERT")
+POINTBERT_CFG = os.path.join(POINTBERT_ROOT, "cfgs", "Mixup_models", "Point-BERT.yaml")
+POINTBERT_DVAE_CKPT = os.path.join(POINTBERT_ROOT, "dVAE.pth")
+POINTBERT_BERT_CKPT = os.path.join(POINTBERT_ROOT, "Point-BERT.pth")
+if POINTBERT_ROOT not in sys.path:
+    sys.path.insert(0, POINTBERT_ROOT)
+pb_models_dir = os.path.join(POINTBERT_ROOT, "models")
+pb_utils_dir = os.path.join(POINTBERT_ROOT, "utils")
+for p in (pb_models_dir, pb_utils_dir):
+    if p not in sys.path:
+        sys.path.insert(0, p)
+from utils.config import cfg_from_yaml_file
+from build import build_model_from_cfg
+from Point_BERT import Point_BERT as _PointBERT
 
 class PointBERTEncoder(BaseEncoder):
     """
@@ -198,18 +214,52 @@ class PointBERTEncoder(BaseEncoder):
     Provides semantically rich features through self-supervised pretraining.
     """
 
-    def __init__(self, output_dim: int = 2048, pretrained: bool = True, freeze_backbone: bool = True):
-        """
-        Initialize the Point-BERT encoder.
-
-        Args:
-            output_dim (int): Dimension of the encoder output features.
-            pretrained (bool): Whether to load pretrained model weights.
-            freeze_backbone (bool): If True, freeze backbone parameters during training.
-        """
+    def __init__(
+        self,
+        output_dim: int | None = None,
+        pretrained: bool = True,
+        freeze_backbone: bool = True,
+        cfg_path: str | None = None,
+        dvae_ckpt: str | None = None,
+        pointbert_ckpt: str | None = None,
+    ):
         super().__init__()
-        # Define model loading and initialization here (to be implemented by vision team)
-        pass
+        # ------- 1. Parse configuration -------
+        cfg_path = cfg_path or POINTBERT_CFG
+        cfg = cfg_from_yaml_file(cfg_path)      # Returns an EasyDict configuration
+        model_cfg = cfg.model                   # Model sub-config consumed by the Point-BERT backbone
+
+        # Point-BERT expects a valid dVAE checkpoint path during _prepare_dvae
+        dvae_ckpt = dvae_ckpt or POINTBERT_DVAE_CKPT
+        model_cfg.dvae_config.ckpt = dvae_ckpt
+
+        # ------- 2. Instantiate Point-BERT backbone -------
+        # build_model_from_cfg dispatches to the registered Point_BERT class via model_cfg.NAME
+        self.backbone: _PointBERT = build_model_from_cfg(model_cfg)
+
+        # ------- 3. Load pretrained Point-BERT weights -------
+        if pretrained:
+            pointbert_ckpt = pointbert_ckpt or POINTBERT_BERT_CKPT
+            if not os.path.isfile(pointbert_ckpt):
+                raise FileNotFoundError(f"Point-BERT checkpoint not found: {pointbert_ckpt}")
+            # Use the helper provided by the official Point_BERT implementation
+            self.backbone.load_model_from_ckpt(pointbert_ckpt)
+            print(f"[PointBERTEncoder] Loaded pretrained weights from {pointbert_ckpt}")
+
+        # ------- 4. Optionally freeze backbone and record output dimensionality -------
+        if freeze_backbone:
+            for p in self.backbone.parameters():
+                p.requires_grad = False
+            self.backbone.eval()
+
+        # CLS token after cls_head becomes the geometric embedding dimension exposed by this encoder
+        self.output_dim = self.backbone.transformer_q.cls_dim
+        if output_dim is not None and output_dim != self.output_dim:
+            # Keep dimensional reconciliation in the Projection module instead of forcing a local linear layer
+            print(
+                f"[PointBERTEncoder] Note: backbone cls_dim={self.output_dim}, "
+                f"but PointBERTEncoder received output_dim={output_dim}."
+            )
 
     def forward(self, point_cloud: torch.Tensor):
         """
@@ -220,7 +270,13 @@ class PointBERTEncoder(BaseEncoder):
             torch.Tensor: Global feature embedding of shape (B, D),
                           typically using the [CLS] token representation.
         """
-        pass
+        device = next(self.backbone.parameters()).device
+        cls_feat = self.backbone.forward_eval(point_cloud.to(device))   # (B, cls_dim)
+        if torch.isnan(cls_feat).any():
+            print("[PointBERTEncoder] Warning: forward pass produced NaNs")
+        else:
+            print(f"[PointBERTEncoder] Forward pass OK (batch={cls_feat.size(0)}, dim={cls_feat.size(1)})")
+        return cls_feat
 
     def get_output_dim(self):
         """Return the output embedding dimension."""
