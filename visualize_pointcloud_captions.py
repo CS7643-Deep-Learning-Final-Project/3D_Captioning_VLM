@@ -112,7 +112,7 @@ def save_interactive_html(path: Path, plots: List[dict]) -> None:
     cols = len(plots)
     if cols > 1:
         max_hspacing = max(0.0, (1.0 / (cols - 1)) - 1e-3)
-        horizontal_spacing = min(0.12, max_hspacing)
+        horizontal_spacing = min(0.08, max_hspacing)
     else:
         horizontal_spacing = 0.0
 
