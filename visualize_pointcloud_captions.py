@@ -124,7 +124,7 @@ def save_interactive_html(path: Path, plots: List[dict], cols_per_row: int = 5) 
         cols=cols,
         specs=[[{"type": "scene"} for _ in range(cols)] for _ in range(rows)],
         horizontal_spacing=horizontal_spacing,
-        vertical_spacing=0.18 if rows > 1 else 0.0,
+        vertical_spacing=0.66 if rows > 1 else 0.0,
     )
 
     for plot_idx, plot in enumerate(plots):
