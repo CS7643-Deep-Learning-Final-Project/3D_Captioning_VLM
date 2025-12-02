@@ -113,6 +113,7 @@ def save_interactive_html(path: Path, plots: List[dict]) -> None:
         rows=1,
         cols=len(plots),
         specs=[[{"type": "scene"} for _ in plots]],
+        horizontal_spacing=0.18,
     )
 
     for idx, plot in enumerate(plots, start=1):
@@ -146,10 +147,17 @@ def save_interactive_html(path: Path, plots: List[dict]) -> None:
             aspectmode="data",
         )
 
+        domain = fig.layout[scene_name].domain
+        if hasattr(domain, "x"):
+            start, end = domain.x
+        else:
+            start, end = domain
+        center_x = 0.5 * (start + end)
+
         fig.add_annotation(
             text=plot["title_html"],
-            x=(2 * idx - 1) / (2 * len(plots)),
-            y=-0.5,
+            x=center_x,
+            y=-0.55,
             xref="paper",
             yref="paper",
             showarrow=False,
@@ -161,7 +169,7 @@ def save_interactive_html(path: Path, plots: List[dict]) -> None:
         margin=dict(l=0, r=0, t=24, b=180),
         showlegend=False,
         height=500,
-        width=320 * len(plots),
+        width=360 * len(plots),
     )
 
     path.parent.mkdir(parents=True, exist_ok=True)
