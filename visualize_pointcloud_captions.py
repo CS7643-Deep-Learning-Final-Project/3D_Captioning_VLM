@@ -110,18 +110,11 @@ def save_interactive_html(path: Path, plots: List[dict]) -> None:
         raise ValueError("No plots available to render.")
 
     cols = len(plots)
-    desired_spacing = 0.08  # leave a small gutter but give scenes most of the width
-    if cols > 1:
-        max_hspacing = max(0.0, (1.0 / (cols - 1)) - 1e-3)
-        horizontal_spacing = min(desired_spacing, max_hspacing)
-    else:
-        horizontal_spacing = 0.0
 
     fig = make_subplots(
         rows=1,
         cols=cols,
         specs=[[{"type": "scene"} for _ in plots]],
-        horizontal_spacing=horizontal_spacing,
     )
 
     for idx, plot in enumerate(plots, start=1):
@@ -147,48 +140,27 @@ def save_interactive_html(path: Path, plots: List[dict]) -> None:
             col=idx,
         )
 
-        bounds_min = coords.min(axis=0)
-        bounds_max = coords.max(axis=0)
-        center = 0.5 * (bounds_max + bounds_min)
-        max_range = float((bounds_max - bounds_min).max())
-        if max_range <= 0.0:
-            max_range = 1.0
-        half_span = 0.5 * max_range
-        axis_ranges = [
-            (center[0] - half_span, center[0] + half_span),
-            (center[1] - half_span, center[1] + half_span),
-            (center[2] - half_span, center[2] + half_span),
-        ]
-
         scene_name = f"scene{'' if idx == 1 else idx}"
         fig.layout[scene_name].update(
             xaxis=dict(
                 visible=False,
-                range=axis_ranges[0],
-                autorange=False,
                 showgrid=False,
                 zeroline=False,
                 showbackground=False,
             ),
             yaxis=dict(
                 visible=False,
-                range=axis_ranges[1],
-                autorange=False,
                 showgrid=False,
                 zeroline=False,
                 showbackground=False,
             ),
             zaxis=dict(
                 visible=False,
-                range=axis_ranges[2],
-                autorange=False,
                 showgrid=False,
                 zeroline=False,
                 showbackground=False,
             ),
-            aspectmode="cube",
-            aspectratio=dict(x=1, y=1, z=1),
-            camera=dict(eye=dict(x=1.5, y=1.5, z=1.0)),
+            aspectmode="data",
         )
 
         domain = fig.layout[scene_name].domain
