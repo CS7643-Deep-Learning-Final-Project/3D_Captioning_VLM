@@ -110,9 +110,10 @@ def save_interactive_html(path: Path, plots: List[dict]) -> None:
         raise ValueError("No plots available to render.")
 
     cols = len(plots)
+    desired_spacing = 0.08  # leave a small gutter but give scenes most of the width
     if cols > 1:
         max_hspacing = max(0.0, (1.0 / (cols - 1)) - 1e-3)
-        horizontal_spacing = min(0.6, max_hspacing)
+        horizontal_spacing = min(desired_spacing, max_hspacing)
     else:
         horizontal_spacing = 0.0
 
