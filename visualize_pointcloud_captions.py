@@ -6,7 +6,6 @@ plots their point clouds, and overlays both the generated and reference captions
 
 import argparse
 import html
-import math
 import random
 import textwrap
 from pathlib import Path
@@ -98,7 +97,7 @@ def format_caption_html(text: str, width: int = 48) -> str:
     return "<br>".join(html.escape(line) for line in formatted.splitlines())
 
 
-def save_interactive_html(path: Path, plots: List[dict], cols_per_row: int = 5) -> None:
+def save_interactive_html(path: Path, plots: List[dict]) -> None:
     try:
         from plotly.subplots import make_subplots
         import plotly.graph_objects as go
@@ -110,33 +109,21 @@ def save_interactive_html(path: Path, plots: List[dict], cols_per_row: int = 5) 
     if not plots:
         raise ValueError("No plots available to render.")
 
-    cols = max(1, cols_per_row)
-    rows = math.ceil(len(plots) / cols)
-
+    cols = len(plots)
     if cols > 1:
         max_hspacing = max(0.0, (1.0 / (cols - 1)) - 1e-3)
-        horizontal_spacing = min(0.1, max_hspacing)
+        horizontal_spacing = min(0.12, max_hspacing)
     else:
         horizontal_spacing = 0.0
 
-    if rows > 1:
-        max_vspacing = max(0.0, (1.0 / (rows - 1)) - 1e-3)
-        desired_vspacing = 0.25
-        vertical_spacing = min(desired_vspacing, max_vspacing)
-    else:
-        vertical_spacing = 0.0
-
     fig = make_subplots(
-        rows=rows,
+        rows=1,
         cols=cols,
-        specs=[[{"type": "scene"} for _ in range(cols)] for _ in range(rows)],
+        specs=[[{"type": "scene"} for _ in plots]],
         horizontal_spacing=horizontal_spacing,
-        vertical_spacing=vertical_spacing,
     )
 
-    for plot_idx, plot in enumerate(plots):
-        row = (plot_idx // cols) + 1
-        col = (plot_idx % cols) + 1
+    for idx, plot in enumerate(plots, start=1):
         coords = plot["coords"]
         colors = plot["colors"]
         if colors is None:
@@ -155,11 +142,11 @@ def save_interactive_html(path: Path, plots: List[dict], cols_per_row: int = 5) 
                 marker=marker,
                 hoverinfo="skip",
             ),
-            row=row,
-            col=col,
+            row=1,
+            col=idx,
         )
 
-        scene_name = f"scene{'' if plot_idx == 0 else plot_idx + 1}"
+        scene_name = f"scene{'' if idx == 1 else idx}"
         fig.layout[scene_name].update(
             xaxis=dict(visible=False),
             yaxis=dict(visible=False),
@@ -172,16 +159,8 @@ def save_interactive_html(path: Path, plots: List[dict], cols_per_row: int = 5) 
             start_x, end_x = domain.x
         else:
             start_x, end_x = domain
-        if hasattr(domain, "y"):
-            start_y, end_y = domain.y
-        else:
-            start_y, end_y = (1.0, 1.0)
         center_x = 0.5 * (start_x + end_x)
-        if rows > 1:
-            row_gap = max(0.09, vertical_spacing / 2 + 0.04)
-        else:
-            row_gap = 0.1
-        caption_y = start_y - row_gap
+        caption_y = -0.55
 
         fig.add_annotation(
             text=plot["title_html"],
@@ -198,7 +177,7 @@ def save_interactive_html(path: Path, plots: List[dict], cols_per_row: int = 5) 
         margin=dict(l=0, r=0, t=24, b=180),
         showlegend=False,
         height=500,
-        width=360 * min(cols, len(plots)),
+        width=360 * len(plots),
     )
 
     path.parent.mkdir(parents=True, exist_ok=True)
