@@ -114,12 +114,14 @@ def save_interactive_html(path: Path, plots: List[dict], cols_per_row: int = 5) 
     rows = math.ceil(len(plots) / cols)
 
     if cols > 1:
-        horizontal_spacing = max(0.0, (1.0 / (cols - 1)) - 1e-3)
+        max_hspacing = max(0.0, (1.0 / (cols - 1)) - 1e-3)
+        horizontal_spacing = min(0.12, max_hspacing)
     else:
         horizontal_spacing = 0.0
 
     if rows > 1:
-        vertical_spacing = max(0.0, (1.0 / (rows - 1)) - 1e-3)
+        max_vspacing = max(0.0, (1.0 / (rows - 1)) - 1e-3)
+        vertical_spacing = min(0.2, max_vspacing)
     else:
         vertical_spacing = 0.0
 
