@@ -109,11 +109,18 @@ def save_interactive_html(path: Path, plots: List[dict]) -> None:
     if not plots:
         raise ValueError("No plots available to render.")
 
+    cols = len(plots)
+    if cols > 1:
+        max_spacing = max(0.0, (1.0 / (cols - 1)) - 1e-3)
+        horizontal_spacing = min(0.18, max_spacing)
+    else:
+        horizontal_spacing = 0.0
+
     fig = make_subplots(
         rows=1,
-        cols=len(plots),
+        cols=cols,
         specs=[[{"type": "scene"} for _ in plots]],
-        horizontal_spacing=0.18,
+        horizontal_spacing=horizontal_spacing,
     )
 
     for idx, plot in enumerate(plots, start=1):
