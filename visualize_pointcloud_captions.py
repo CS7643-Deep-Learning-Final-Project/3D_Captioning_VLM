@@ -121,7 +121,8 @@ def save_interactive_html(path: Path, plots: List[dict], cols_per_row: int = 5) 
 
     if rows > 1:
         max_vspacing = max(0.0, (1.0 / (rows - 1)) - 1e-3)
-        vertical_spacing = min(0.3, max_vspacing)
+        desired_vspacing = 0.25
+        vertical_spacing = min(desired_vspacing, max_vspacing)
     else:
         vertical_spacing = 0.0
 
@@ -177,9 +178,9 @@ def save_interactive_html(path: Path, plots: List[dict], cols_per_row: int = 5) 
             start_y, end_y = (1.0, 1.0)
         center_x = 0.5 * (start_x + end_x)
         if rows > 1:
-            row_gap = max(0.05, vertical_spacing / 2 + 0.02)
+            row_gap = max(0.09, vertical_spacing / 2 + 0.04)
         else:
-            row_gap = 0.08
+            row_gap = 0.1
         caption_y = start_y - row_gap
 
         fig.add_annotation(
