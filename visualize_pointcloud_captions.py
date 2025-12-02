@@ -114,17 +114,21 @@ def save_interactive_html(path: Path, plots: List[dict], cols_per_row: int = 5) 
     rows = math.ceil(len(plots) / cols)
 
     if cols > 1:
-        max_spacing = max(0.0, (1.0 / (cols - 1)) - 1e-3)
-        horizontal_spacing = min(0.12, max_spacing)
+        horizontal_spacing = max(0.0, (1.0 / (cols - 1)) - 1e-3)
     else:
         horizontal_spacing = 0.0
+
+    if rows > 1:
+        vertical_spacing = max(0.0, (1.0 / (rows - 1)) - 1e-3)
+    else:
+        vertical_spacing = 0.0
 
     fig = make_subplots(
         rows=rows,
         cols=cols,
         specs=[[{"type": "scene"} for _ in range(cols)] for _ in range(rows)],
         horizontal_spacing=horizontal_spacing,
-        vertical_spacing=0.66 if rows > 1 else 0.0,
+        vertical_spacing=vertical_spacing,
     )
 
     for plot_idx, plot in enumerate(plots):
